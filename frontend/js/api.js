@@ -62,10 +62,11 @@ const Api = (() => {
     },
 
     equipamento: {
-      listar:   (status) => Api.get(`/equipamento${status ? `?status=${status}` : ''}`),
-      buscarId: (id)     => Api.get(`/equipamento/${id}`),
-      entrada:  (data)   => Api.post('/equipamento/entrada', data),
-      saida:    (id, d)  => Api.post(`/equipamento/${id}/saida`, d),
+      listar:       (status) => Api.get(`/equipamento${status ? `?status=${status}` : ''}`),
+      buscarId:     (id)     => Api.get(`/equipamento/${id}`),
+      entrada:      (data)   => Api.post('/equipamento/entrada', data),
+      saida:        (id, d)  => Api.post(`/equipamento/${id}/saida`, d),
+      montarPallet: (data)   => Api.post('/equipamento/montar-pallet', data),
     },
 
     movimentacao: {
@@ -75,12 +76,16 @@ const Api = (() => {
     },
 
     reparo: {
-      prioridades: ()      => Api.get('/reparo/prioridades'),
-      buscarId:    (id)    => Api.get(`/reparo/${id}`),
-      atualizar:   (id, d) => Api.put(`/reparo/${id}`, d),
-      iniciar:     (id)    => Api.post(`/reparo/${id}/iniciar`, {}),
-      pausar:      (id)    => Api.post(`/reparo/${id}/pausar`, {}),
-      finalizar:   (id, d) => Api.post(`/reparo/${id}/finalizar`, d),
+      prioridades:         ()           => Api.get('/reparo/prioridades'),
+      criticos:            ()           => Api.get('/reparo/criticos'),
+      buscarId:            (id)         => Api.get(`/reparo/${id}`),
+      atualizar:           (id, d)      => Api.put(`/reparo/${id}`, d),
+      iniciar:             (id)         => Api.post(`/reparo/${id}/iniciar`, {}),
+      pausar:              (id)         => Api.post(`/reparo/${id}/pausar`, {}),
+      finalizar:           (id, d)      => Api.post(`/reparo/${id}/finalizar`, d),
+      solicitarLote:       (data)       => Api.post('/reparo/solicitar-lote', data),
+      listarSolicitacoes:  (status)     => Api.get(`/reparo/solicitacoes${status ? `?status=${status}` : ''}`),
+      atualizarSolicitacao:(id, d)      => Api.put(`/reparo/solicitacoes/${id}`, d),
     },
   };
 })();

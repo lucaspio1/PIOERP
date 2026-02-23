@@ -67,6 +67,20 @@
       </div>
 
       <div class="nav-group">
+        <span class="nav-label">Recebimento</span>
+        <a href="#" class="nav-item" data-section="recebimento">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Recebimento
+          <span class="nav-badge" id="badge-recebimento" style="display:none">0</span>
+        </a>
+        <a href="#" class="nav-item" data-section="solicitacoes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Solicitações Almox.
+          <span class="nav-badge nav-badge-danger" id="badge-solicitacoes" style="display:none">0</span>
+        </a>
+      </div>
+
+      <div class="nav-group">
         <span class="nav-label">Manutenção</span>
         <a href="#" class="nav-item" data-section="reparo">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
@@ -276,6 +290,9 @@
             <option value="">Todos os status</option>
             <option value="reposicao">Reposição</option>
             <option value="ag_triagem">Ag. Triagem</option>
+            <option value="em_uso">Em Uso</option>
+            <option value="pre_triagem">Pré-Triagem</option>
+            <option value="pre_venda">Pré-Venda</option>
             <option value="venda">Venda</option>
           </select>
           <input type="search" id="search-equip" class="input-search" placeholder="Buscar por nº série ou patrimônio..." />
@@ -459,6 +476,36 @@
     <section id="section-reparo" class="page-section">
       <div class="reparo-layout">
 
+        <!-- Painel de Modelos Críticos (acima da fila) -->
+        <div class="card" id="reparo-criticos-panel" style="display:none">
+          <div class="card-header">
+            <div>
+              <h3>Alertas Críticos — Modelos Abaixo do Mínimo</h3>
+              <p class="card-subtitle">Itens que precisam de triagem urgente. Use "Solicitar Lote" para pedir ao almoxarife que desça o pallet.</p>
+            </div>
+          </div>
+          <div class="card-body p0">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Modelo</th>
+                    <th>Categoria</th>
+                    <th>Reposição / Mín.</th>
+                    <th>Déficit</th>
+                    <th>Em Pré-Triagem</th>
+                    <th>Solicitação</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-reparo-criticos">
+                  <tr><td colspan="7" class="empty-row">Carregando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <!-- Tabela de prioridades -->
         <div class="card">
           <div class="card-header">
@@ -553,6 +600,214 @@
       </div>
     </section>
 
+    <!-- ─────────────────────────────────────────────────
+         SECTION: RECEBIMENTO
+    ───────────────────────────────────────────────── -->
+    <section id="section-recebimento" class="page-section">
+      <!-- Sub-tabs -->
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <div class="tab-group" id="receb-tabs">
+            <button class="btn btn-primary tab-btn active" data-tab="receb-catalogacao" onclick="Recebimento.trocarAba('catalogacao')">
+              Entrada e Catalogação
+            </button>
+            <button class="btn btn-outline tab-btn" data-tab="receb-montar" onclick="Recebimento.trocarAba('montar')">
+              Montar Pallet / Caixa
+            </button>
+          </div>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-sm btn-outline" onclick="Recebimento.carregar()">Atualizar</button>
+        </div>
+      </div>
+
+      <!-- Aba 1: Entrada e Catalogação (usa fluxo de entrada com tipo entrada_recebimento) -->
+      <div id="receb-catalogacao" class="receb-tab-content">
+        <div class="form-layout">
+          <div class="card form-card">
+            <div class="card-header">
+              <h3>Catalogar Item Recebido</h3>
+              <p class="card-subtitle">Registre o item chegado de outra loja e destine-o à prateleira correta.</p>
+            </div>
+            <div class="card-body">
+              <form id="form-recebimento" novalidate>
+
+                <div class="form-section-title">Identificação do Equipamento</div>
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label for="receb-catalogo">Modelo (Catálogo) *</label>
+                    <select id="receb-catalogo" class="input-select" required>
+                      <option value="">Selecione o modelo...</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="receb-destino-inicial">Prateleira de Destino *</label>
+                    <select id="receb-destino-inicial" class="input-select" required>
+                      <option value="pre_triagem">Pré-Triagem (aguarda avaliação)</option>
+                      <option value="pre_venda">Pré-Venda (para venda / sucata)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="receb-serie">Número de Série *</label>
+                    <input type="text" id="receb-serie" class="input-text" placeholder="Ex: SN-ABC123456" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="receb-imobilizado">Patrimônio (Imobilizado) *</label>
+                    <input type="text" id="receb-imobilizado" class="input-text" placeholder="Ex: PAT-00001" required />
+                  </div>
+                </div>
+
+                <div class="form-section-title">Destino Físico (Prateleira de Recebimento)</div>
+                <div class="info-panel" style="margin-bottom:1rem">
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">Pré-Triagem</span>
+                      <span class="info-value"><code id="receb-addr-pretriagem">Carregando...</code></span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Pré-Venda</span>
+                      <span class="info-value"><code id="receb-addr-prevenda">Carregando...</code></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-grid-1">
+                  <div class="form-group">
+                    <label for="receb-obs">Observações / Condição do Item</label>
+                    <input type="text" id="receb-obs" class="input-text" placeholder="Ex: Tela trincada, HD ausente..." />
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="button" class="btn btn-outline" onclick="Recebimento.limparFormCatalogacao()">Limpar</button>
+                  <button type="submit" class="btn btn-primary btn-lg">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Registrar Item Recebido
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aba 2: Montar Pallet / Caixa (transferência em lote) -->
+      <div id="receb-montar" class="receb-tab-content" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Montar Pallet / Caixa</h3>
+              <p class="card-subtitle">Selecione itens das prateleiras de pré-triagem/pré-venda e consolide-os em uma caixa definitiva.</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="montar-filtro-status" class="input-select" onchange="Recebimento.carregarPrateleiras()" style="width:auto">
+                <option value="pre_triagem">Pré-Triagem</option>
+                <option value="pre_venda">Pré-Venda</option>
+              </select>
+            </div>
+          </div>
+          <div class="card-body p0">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width:40px">
+                      <input type="checkbox" id="montar-check-all" onchange="Recebimento.selecionarTodos(this.checked)" title="Selecionar todos" />
+                    </th>
+                    <th>Modelo</th>
+                    <th>Nº Série</th>
+                    <th>Patrimônio</th>
+                    <th>Status</th>
+                    <th>Observações</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-prateleiras">
+                  <tr><td colspan="6" class="empty-row">Carregando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card-body" style="border-top:1px solid var(--c-border)">
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label>Destino dos Itens Selecionados *</label>
+                <select id="montar-status-destino" class="input-select">
+                  <option value="ag_triagem">Ag. Triagem (criará reparo)</option>
+                  <option value="venda">Venda / Sucata (saída do WMS)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Caixa de Destino * <span style="font-size:11px;color:var(--c-text-muted)">(apenas se Ag. Triagem)</span></label>
+                <select id="montar-caixa-destino" class="input-select">
+                  <option value="">Selecione a caixa...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Observações</label>
+                <input type="text" id="montar-obs" class="input-text" placeholder="Opcional..." />
+              </div>
+            </div>
+            <div class="form-actions">
+              <span id="montar-count-badge" class="badge badge-info">0 itens selecionados</span>
+              <button class="btn btn-primary btn-lg" onclick="Recebimento.confirmarMontarPallet()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Transferir Selecionados
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────
+         SECTION: SOLICITAÇÕES DE ALMOXARIFADO
+    ───────────────────────────────────────────────── -->
+    <section id="section-solicitacoes" class="page-section">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <select id="filter-sol-status" class="input-select" onchange="Solicitacoes.carregar()">
+            <option value="">Todas as solicitações</option>
+            <option value="pendente" selected>Pendentes</option>
+            <option value="em_andamento">Em Andamento</option>
+            <option value="atendida">Atendidas</option>
+            <option value="cancelada">Canceladas</option>
+          </select>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-sm btn-outline" onclick="Solicitacoes.carregar()">Atualizar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Solicitações de Descida de Pallet</h3>
+          <p class="card-subtitle">Pedidos do técnico de reparo para o almoxarife descer um lote de determinado modelo.</p>
+        </div>
+        <div class="card-body p0">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Modelo</th>
+                  <th>Categoria</th>
+                  <th>Estoque Atual / Mín.</th>
+                  <th>Déficit</th>
+                  <th>Status</th>
+                  <th>Solicitado em</th>
+                  <th>Observações</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-solicitacoes">
+                <tr><td colspan="9" class="empty-row">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </div><!-- /#main -->
 </div><!-- /#app -->
 
@@ -583,6 +838,8 @@
 <script src="js/catalogo.js"></script>
 <script src="js/endereco.js"></script>
 <script src="js/movimentacao.js"></script>
+<script src="js/recebimento.js"></script>
+<script src="js/solicitacoes.js"></script>
 <script src="js/reparo.js"></script>
 
 </body>

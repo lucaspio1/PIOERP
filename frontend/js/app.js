@@ -115,12 +115,26 @@ function formatTimer(totalSeconds) {
 /** Badge de status de equipamento */
 function badgeStatus(status) {
   const labels = {
-    reposicao:  'Reposição',
-    ag_triagem: 'Ag. Triagem',
-    venda:      'Venda',
-    em_uso:     'Em Uso',
+    reposicao:   'Reposição',
+    ag_triagem:  'Ag. Triagem',
+    venda:       'Venda',
+    em_uso:      'Em Uso',
+    pre_triagem: 'Pré-Triagem',
+    pre_venda:   'Pré-Venda',
   };
   return `<span class="badge status-${status}">${labels[status] || status}</span>`;
+}
+
+/** Badge de status de solicitação de pallet */
+function badgeStatusSolicitacao(status) {
+  const map = {
+    pendente:     { label: 'Pendente',     cls: 'badge-warning' },
+    em_andamento: { label: 'Em Andamento', cls: 'badge-info' },
+    atendida:     { label: 'Atendida',     cls: 'badge-success' },
+    cancelada:    { label: 'Cancelada',    cls: 'badge-gray' },
+  };
+  const s = map[status] || { label: status, cls: 'badge-gray' };
+  return `<span class="badge ${s.cls}">${s.label}</span>`;
 }
 
 /** Badge de status de reparo */
@@ -163,13 +177,15 @@ function montarLocalizacao(row) {
 // ═══════════════════════════════════════════════════════
 const App = (() => {
   const sections = {
-    'dashboard':   { title: 'Dashboard',             onEnter: () => Dashboard.carregar() },
-    'catalogo':    { title: 'Catálogo de Equipamentos', onEnter: () => Catalogo.carregar() },
-    'enderecos':   { title: 'Endereços WMS',          onEnter: () => Endereco.carregar() },
-    'equipamentos':{ title: 'Equipamentos',           onEnter: () => Movimentacao.carregarEquipamentos() },
-    'entrada':     { title: 'Entrada de Equipamento', onEnter: () => Movimentacao.inicializarFormEntrada() },
-    'saida':       { title: 'Saída / Movimentação',   onEnter: () => {} },
-    'reparo':      { title: 'Central de Reparo',      onEnter: () => Reparo.carregar() },
+    'dashboard':    { title: 'Dashboard',                onEnter: () => Dashboard.carregar() },
+    'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => Catalogo.carregar() },
+    'enderecos':    { title: 'Endereços WMS',             onEnter: () => Endereco.carregar() },
+    'equipamentos': { title: 'Equipamentos',              onEnter: () => Movimentacao.carregarEquipamentos() },
+    'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => Movimentacao.inicializarFormEntrada() },
+    'saida':        { title: 'Saída / Movimentação',      onEnter: () => {} },
+    'recebimento':  { title: 'Recebimento',               onEnter: () => Recebimento.carregar() },
+    'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => Solicitacoes.carregar() },
+    'reparo':       { title: 'Central de Reparo',         onEnter: () => Reparo.carregar() },
   };
 
   let currentSection = 'dashboard';
@@ -286,9 +302,12 @@ const Dashboard = (() => {
         const tipoLabel = {
           entrada_compra:          'Entrada Compra',
           entrada_retorno_reparo:  'Retorno Reparo',
+          entrada_recebimento:     'Recebimento',
           saida_uso:               'Saída para Uso',
           saida_triagem:           'Enviado Triagem',
           saida_venda:             'Baixa Venda',
+          movimentacao:            'Movimentação',
+          transferencia_lote:      'Transf. em Lote',
         };
         tbodyRec.innerHTML = movs.map(m => `
           <tr>
