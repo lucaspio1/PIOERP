@@ -182,17 +182,25 @@ exports.pausar = async (req, res, next) => {
 };
 
 // ── FINALIZAR reparo ─────────────────────────────────────────────────────────
-// Fecha a sessão, acumula tempo, muda status do reparo → 'finalizado'
-// e do equipamento → 'reposicao' (retorna ao estoque).
+// Fecha a sessão, acumula tempo, e permite direcionar o equipamento para
+// reposição (padrão), pre_venda ou venda.
 exports.finalizar = async (req, res, next) => {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
 
     const { id } = req.params;
-    const { observacoes_finais, diagnostico } = req.body || {};
+    // status_destino vem do frontend com o local escolhido pelo técnico
+    const { observacoes_finais, diagnostico, status_destino = 'reposicao', caixa_destino_id } = req.body || {};
 
-    const rep = await client.query('SELECT * FROM reparo WHERE id = $1', [id]);
+    // Alteração importante: fazer o JOIN para buscar a `caixa_id` atual no equipamento_fisico
+    const rep = await client.query(`
+      SELECT r.*, ef.caixa_id AS equip_caixa_id
+      FROM reparo r
+      JOIN equipamento_fisico ef ON ef.id = r.equipamento_id
+      WHERE r.id = $1
+    `, [id]);
+
     if (!rep.rows.length) {
       const e = new Error('Reparo não encontrado.'); e.status = 404; throw e;
     }
@@ -229,22 +237,28 @@ exports.finalizar = async (req, res, next) => {
       WHERE id = $4 RETURNING *
     `, [totalFinal, diagnostico || null, observacoes_finais || null, id]);
 
-    // Retorna equipamento ao estoque (reposicao) e registra histórico
+    // Define se o item continua no WMS
+    const removerDoWms = (status_destino === 'venda');
+    const novaCaixa = removerDoWms ? null : (caixa_destino_id || reparo.equip_caixa_id);
+
+    // Atualiza o status do equipamento e, se aplicável, desvincula do endereço físico
     await client.query(
-      `UPDATE equipamento_fisico SET status = 'reposicao' WHERE id = $1`,
-      [reparo.equipamento_id]
+      `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
+      [status_destino, novaCaixa, reparo.equipamento_id]
     );
+
+    // Registra histórico
     await client.query(`
       INSERT INTO historico_movimentacao
         (equipamento_id, tipo, status_anterior, status_novo, observacao)
-      VALUES ($1, 'entrada_retorno_reparo', 'ag_triagem', 'reposicao', $2)
-    `, [reparo.equipamento_id, `Reparo finalizado. Tempo total: ${totalFinal} min. ${observacoes_finais || ''}`]);
+      VALUES ($1, 'movimentacao', 'ag_triagem', $2, $3)
+    `, [reparo.equipamento_id, status_destino, `Reparo finalizado. Tempo: ${totalFinal} min. Destino: ${status_destino}. ${observacoes_finais || ''}`]);
 
     await client.query('COMMIT');
     res.json({
       success: true,
-      message: `Reparo finalizado. Tempo total: ${totalFinal} minutos.`,
-      data: { reparo: rows[0], total_minutos: totalFinal },
+      message: `Reparo finalizado. Tempo total: ${totalFinal} minutos. Destino: ${status_destino}`,
+      data: { reparo: rows[0], total_minutos: totalFinal, status_destino },
     });
   } catch (err) {
     await client.query('ROLLBACK');

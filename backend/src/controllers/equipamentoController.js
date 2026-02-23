@@ -90,16 +90,27 @@ exports.entrada = async (req, res, next) => {
     if (!imobilizado?.trim())  { const e = new Error('"imobilizado" é obrigatório.');   e.status = 400; throw e; }
     if (!caixa_id)             { const e = new Error('"caixa_id" é obrigatório.');      e.status = 400; throw e; }
 
-    const tiposValidos = ['entrada_compra', 'entrada_retorno_reparo'];
+const tiposValidos = ['entrada_compra', 'entrada_retorno_reparo', 'entrada_recebimento'];
     const tipo = tipo_entrada || 'entrada_compra';
+    
     if (!tiposValidos.includes(tipo)) {
-      const e = new Error(`"tipo_entrada" inválido. Aceitos: ${tiposValidos.join(', ')}`); e.status = 400; throw e;
+      const e = new Error(`"tipo_entrada" inválido. Aceitos: ${tiposValidos.join(', ')}`); 
+      e.status = 400; 
+      throw e;
+    }
+
+    // Mapeia o status inicial baseado no tipo de entrada
+    let statusInicial = 'reposicao';
+    if (tipo === 'entrada_recebimento') {
+      statusInicial = 'pre_triagem';
     }
 
     // Verifica se o catálogo existe
     const cat = await client.query('SELECT id FROM item_catalogo WHERE id = $1 AND ativo = TRUE', [item_catalogo_id]);
     if (!cat.rows.length) {
-      const e = new Error('Item de catálogo não encontrado ou inativo.'); e.status = 404; throw e;
+      const e = new Error('Item de catálogo não encontrado ou inativo.'); 
+      e.status = 404; 
+      throw e;
     }
 
     // Verifica se a caixa existe e é do nível correto
@@ -107,24 +118,26 @@ exports.entrada = async (req, res, next) => {
       `SELECT id, nivel FROM endereco_fisico WHERE id = $1 AND ativo = TRUE`, [caixa_id]
     );
     if (!caixa.rows.length || caixa.rows[0].nivel !== 'caixa') {
-      const e = new Error('Endereço de destino inválido. Deve ser uma caixa (nível 4).'); e.status = 400; throw e;
+      const e = new Error('Endereço de destino inválido. Deve ser uma caixa (nível 4).'); 
+      e.status = 400; 
+      throw e;
     }
 
-    // Insere o equipamento
+    // Insere o equipamento (usando $4 para o statusInicial)
     const equip = await client.query(
       `INSERT INTO equipamento_fisico
          (item_catalogo_id, numero_serie, imobilizado, status, caixa_id, observacoes)
-       VALUES ($1, $2, $3, 'reposicao', $4, $5)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [item_catalogo_id, numero_serie.trim(), imobilizado.trim(), caixa_id, observacao?.trim() || null]
+      [item_catalogo_id, numero_serie.trim(), imobilizado.trim(), statusInicial, caixa_id, observacao?.trim() || null]
     );
 
-    // Registra no histórico
+    // Registra no histórico (usando $3 para o statusInicial)
     await client.query(
       `INSERT INTO historico_movimentacao
          (equipamento_id, tipo, status_anterior, status_novo, endereco_destino_id, observacao)
-       VALUES ($1, $2, NULL, 'reposicao', $3, $4)`,
-      [equip.rows[0].id, tipo, caixa_id, observacao?.trim() || null]
+       VALUES ($1, $2, NULL, $3, $4, $5)`,
+      [equip.rows[0].id, tipo, statusInicial, caixa_id, observacao?.trim() || null]
     );
 
     await client.query('COMMIT');
@@ -164,11 +177,13 @@ exports.saida = async (req, res, next) => {
     const atual = equip.rows[0];
 
     // Mapeia destinos permitidos por status atual
-    const statusMap = {
-      saida_uso:  { novo_status: 'em_uso',    tipo: 'saida_uso',     descricao: 'Enviado para uso' },
-      ag_triagem: { novo_status: 'ag_triagem',tipo: 'saida_triagem', descricao: 'Enviado para triagem' },
-      venda:      { novo_status: 'venda',     tipo: 'saida_venda',   descricao: 'Baixado para venda/sucata' },
-    };
+   const statusMap = {
+  saida_uso:     { novo_status: 'em_uso',     tipo: 'saida_uso',     descricao: 'Enviado para uso (removido do estoque)' },
+  ag_triagem:    { novo_status: 'ag_triagem', tipo: 'saida_triagem', descricao: 'Alocado em pallet para triagem' },
+  venda:         { novo_status: 'venda',      tipo: 'saida_venda',   descricao: 'Baixado para venda/sucata' },
+  pre_venda:     { novo_status: 'pre_venda',  tipo: 'movimentacao',  descricao: 'Movido para prateleira de pré-venda' },
+  reposicao:     { novo_status: 'reposicao',  tipo: 'movimentacao',  descricao: 'Retornado ao estoque pronto' }
+};
 
     // Aceitar 'reposicao' para retorno (ex: saiu para uso, voltou)
     if (status_destino === 'reposicao') {
@@ -180,13 +195,14 @@ exports.saida = async (req, res, next) => {
       const e = new Error(`"status_destino" inválido. Aceitos: ${Object.keys(statusMap).join(', ')}`); e.status = 400; throw e;
     }
 
-    const novaCaixaId = caixa_destino_id || atual.caixa_id;
+// Se for saída para uso ou venda (baixa), o equipamento perde o endereço físico (sai do estoque WMS)
+const vaiSairDoEstoque = (acao.novo_status === 'em_uso' || acao.novo_status === 'venda');
+const novaCaixaId = vaiSairDoEstoque ? null : (caixa_destino_id || atual.caixa_id);
 
-    // Atualiza equipamento
-    await client.query(
-      `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
-      [acao.novo_status, novaCaixaId, id]
-    );
+await client.query(
+  `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
+  [acao.novo_status, novaCaixaId, id]
+);
 
     // Registra no histórico
     await client.query(
