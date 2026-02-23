@@ -1,14 +1,16 @@
 -- =============================================================================
 -- Migration 001 — Corrige v_estoque_por_catalogo: adiciona coluna "ativo"
 --
--- Problema: a view omitia ic.ativo no SELECT, causando o erro
---   "column ativo does not exist" ao listar o catálogo de equipamentos.
+-- Problema: CREATE OR REPLACE VIEW não permite inserir colunas no meio.
+-- Solução: DROP + CREATE.
 --
--- Aplicar em banco existente:
---   docker compose exec db psql -U pioerp -d pioerp -f /migrations/001_fix_view_ativo.sql
+-- Aplicar em banco existente (via WSL):
+--   docker compose exec db psql -U pioerp -d pioerp -f /docker-entrypoint-initdb.d/001_fix_view_ativo.sql
 -- =============================================================================
 
-CREATE OR REPLACE VIEW v_estoque_por_catalogo AS
+DROP VIEW IF EXISTS v_estoque_por_catalogo;
+
+CREATE VIEW v_estoque_por_catalogo AS
 SELECT
     ic.id,
     ic.nome,
