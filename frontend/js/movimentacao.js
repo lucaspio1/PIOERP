@@ -183,6 +183,12 @@ const Movimentacao = (() => {
           <option value="ag_triagem">Enviar para Ag. Triagem (reparo)</option>
           <option value="venda">Baixar para Venda / Sucata</option>
         `;
+      } else if (equip.status === 'em_uso') {
+        selDestino.innerHTML += `
+          <option value="reposicao">Retornar ao Estoque (Reposição)</option>
+          <option value="ag_triagem">Enviar para Ag. Triagem (reparo)</option>
+          <option value="venda">Baixar para Venda / Sucata</option>
+        `;
       } else if (equip.status === 'ag_triagem') {
         selDestino.innerHTML += `
           <option value="reposicao">Retornar ao Estoque (Reposição)</option>

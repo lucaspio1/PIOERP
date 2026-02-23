@@ -10,7 +10,7 @@ exports.list = async (req, res, next) => {
     const conditions = [];
 
     if (status) {
-      const validos = ['reposicao', 'ag_triagem', 'venda'];
+      const validos = ['reposicao', 'ag_triagem', 'venda', 'em_uso'];
       if (!validos.includes(status)) {
         const e = new Error(`Status inválido. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
       }
@@ -165,7 +165,7 @@ exports.saida = async (req, res, next) => {
 
     // Mapeia destinos permitidos por status atual
     const statusMap = {
-      saida_uso:  { novo_status: 'reposicao', tipo: 'saida_uso',     descricao: 'Enviado para uso' },
+      saida_uso:  { novo_status: 'em_uso',    tipo: 'saida_uso',     descricao: 'Enviado para uso' },
       ag_triagem: { novo_status: 'ag_triagem',tipo: 'saida_triagem', descricao: 'Enviado para triagem' },
       venda:      { novo_status: 'venda',     tipo: 'saida_venda',   descricao: 'Baixado para venda/sucata' },
     };
