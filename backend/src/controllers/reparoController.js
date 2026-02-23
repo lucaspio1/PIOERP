@@ -267,3 +267,146 @@ exports.finalizar = async (req, res, next) => {
     client.release();
   }
 };
+
+// ── Modelos críticos com visibilidade expandida (para painel da Central) ──────
+// GET /api/reparo/criticos
+// Retorna modelos abaixo do estoque mínimo, com contagem de pré-triagem e
+// indicação de solicitação de pallet ativa para cada modelo.
+exports.getCriticos = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT
+        ic.id, ic.nome, ic.categoria, ic.estoque_minimo,
+        v.qtd_reposicao, v.qtd_ag_triagem, v.deficit, v.estoque_critico,
+        COUNT(ef.id) FILTER (WHERE ef.status = 'pre_triagem') AS qtd_pre_triagem,
+        COUNT(ef.id) FILTER (WHERE ef.status = 'pre_venda')   AS qtd_pre_venda,
+        EXISTS(
+          SELECT 1 FROM solicitacao_pallet sp
+          WHERE sp.item_catalogo_id = ic.id
+            AND sp.status IN ('pendente', 'em_andamento')
+        ) AS tem_solicitacao_ativa
+      FROM v_estoque_por_catalogo v
+      JOIN item_catalogo ic      ON ic.id = v.id
+      LEFT JOIN equipamento_fisico ef ON ef.item_catalogo_id = ic.id
+      WHERE v.estoque_critico = TRUE
+      GROUP BY ic.id, ic.nome, ic.categoria, ic.estoque_minimo,
+               v.qtd_reposicao, v.qtd_ag_triagem, v.deficit, v.estoque_critico
+      ORDER BY v.deficit DESC, ic.nome ASC
+    `);
+    res.json({ success: true, data: rows, total: rows.length });
+  } catch (err) { next(err); }
+};
+
+// ── SOLICITAR LOTE (pedir ao almoxarife para descer pallet) ──────────────────
+// POST /api/reparo/solicitar-lote
+exports.solicitarLote = async (req, res, next) => {
+  try {
+    const { item_catalogo_id, observacao } = req.body;
+
+    if (!item_catalogo_id) {
+      const e = new Error('"item_catalogo_id" é obrigatório.'); e.status = 400; throw e;
+    }
+
+    // Valida que o catálogo existe
+    const cat = await db.query('SELECT id, nome FROM item_catalogo WHERE id = $1 AND ativo = TRUE', [item_catalogo_id]);
+    if (!cat.rows.length) {
+      const e = new Error('Item de catálogo não encontrado.'); e.status = 404; throw e;
+    }
+
+    // Verifica se já existe solicitação pendente/em_andamento para este modelo
+    const ativa = await db.query(
+      `SELECT id FROM solicitacao_pallet WHERE item_catalogo_id = $1 AND status IN ('pendente', 'em_andamento') LIMIT 1`,
+      [item_catalogo_id]
+    );
+    if (ativa.rows.length) {
+      const e = new Error('Já existe uma solicitação ativa para este modelo. Aguarde o atendimento.'); e.status = 409; throw e;
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO solicitacao_pallet (item_catalogo_id, observacao)
+       VALUES ($1, $2) RETURNING *`,
+      [item_catalogo_id, observacao?.trim() || null]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `Solicitação criada para "${cat.rows[0].nome}". O almoxarife será notificado.`,
+      data: rows[0],
+    });
+  } catch (err) { next(err); }
+};
+
+// ── LISTAR SOLICITAÇÕES DE PALLET ─────────────────────────────────────────────
+// GET /api/reparo/solicitacoes?status=pendente
+exports.listarSolicitacoes = async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    const params = [];
+    const conditions = [];
+
+    if (status) {
+      const validos = ['pendente', 'em_andamento', 'atendida', 'cancelada'];
+      if (!validos.includes(status)) {
+        const e = new Error(`Status inválido. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
+      }
+      conditions.push(`sp.status = $${params.push(status)}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const { rows } = await db.query(`
+      SELECT
+        sp.*,
+        ic.nome AS modelo, ic.categoria,
+        ic.estoque_minimo,
+        v.qtd_reposicao, v.deficit
+      FROM solicitacao_pallet sp
+      JOIN item_catalogo ic ON ic.id = sp.item_catalogo_id
+      LEFT JOIN v_estoque_por_catalogo v ON v.id = ic.id
+      ${where}
+      ORDER BY
+        CASE sp.status
+          WHEN 'pendente'     THEN 1
+          WHEN 'em_andamento' THEN 2
+          WHEN 'atendida'     THEN 3
+          WHEN 'cancelada'    THEN 4
+          ELSE 5
+        END,
+        sp.created_at DESC
+    `, params);
+
+    res.json({ success: true, data: rows, total: rows.length });
+  } catch (err) { next(err); }
+};
+
+// ── ATUALIZAR STATUS DE SOLICITAÇÃO (almoxarife atende) ───────────────────────
+// PUT /api/reparo/solicitacoes/:id
+exports.atualizarSolicitacao = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, observacao } = req.body;
+
+    const validos = ['pendente', 'em_andamento', 'atendida', 'cancelada'];
+    if (!status || !validos.includes(status)) {
+      const e = new Error(`"status" é obrigatório. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
+    }
+
+    const atendidaEm = status === 'atendida' ? 'NOW()' : 'atendida_em';
+
+    const { rows } = await db.query(`
+      UPDATE solicitacao_pallet
+        SET status       = $1,
+            observacao   = COALESCE($2, observacao),
+            atendida_em  = CASE WHEN $1 = 'atendida' THEN NOW() ELSE atendida_em END,
+            updated_at   = NOW()
+      WHERE id = $3
+      RETURNING *
+    `, [status, observacao?.trim() || null, id]);
+
+    if (!rows.length) {
+      const e = new Error('Solicitação não encontrada.'); e.status = 404; throw e;
+    }
+
+    res.json({ success: true, data: rows[0], message: `Solicitação marcada como "${status}".` });
+  } catch (err) { next(err); }
+};

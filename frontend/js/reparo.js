@@ -2,9 +2,10 @@
  * PIOERP — Módulo: Central de Reparo
  *
  * Funcionalidades:
- * 1. Tabela de prioridades (query complexa do backend)
- * 2. Painel de controle com timer de sessão em tempo real
- * 3. Fluxo: Iniciar → Pausar → Retomar → Finalizar
+ * 1. Painel de Críticos — modelos abaixo do estoque mínimo (com botão Solicitar Lote)
+ * 2. Tabela de prioridades (query complexa do backend)
+ * 3. Painel de controle com timer de sessão em tempo real
+ * 4. Fluxo: Iniciar → Pausar → Retomar → Finalizar (com destino: reposição, pré-venda ou venda)
  */
 
 const Reparo = (() => {
@@ -14,10 +15,88 @@ const Reparo = (() => {
   let _reparoSelecionadoId = null;
 
   // ════════════════════════════════════════════════════════
-  // TABELA DE PRIORIDADES
+  // CARREGAR TUDO
   // ════════════════════════════════════════════════════════
 
   async function carregar() {
+    await Promise.all([
+      _carregarCriticos(),
+      _carregarFila(),
+    ]);
+  }
+
+  // ════════════════════════════════════════════════════════
+  // PAINEL DE CRÍTICOS (modelos abaixo do mínimo)
+  // ════════════════════════════════════════════════════════
+
+  async function _carregarCriticos() {
+    const tbody = document.getElementById('tbody-reparo-criticos');
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-row"><span class="spinner"></span></td></tr>`;
+    try {
+      const res = await Api.reparo.criticos();
+      _renderizarCriticos(res.data);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  function _renderizarCriticos(lista) {
+    const tbody = document.getElementById('tbody-reparo-criticos');
+    const panel = document.getElementById('reparo-criticos-panel');
+
+    if (!lista.length) {
+      if (panel) panel.style.display = 'none';
+      return;
+    }
+
+    if (panel) panel.style.display = 'block';
+
+    tbody.innerHTML = lista.map(r => `
+      <tr class="row-critical">
+        <td><strong>${escapeHtml(r.nome)}</strong></td>
+        <td>${escapeHtml(r.categoria)}</td>
+        <td>
+          <span style="font-weight:700;color:var(--c-danger)">${r.qtd_reposicao}</span>
+          <span style="color:var(--c-text-muted)"> / ${r.estoque_minimo}</span>
+        </td>
+        <td><span class="badge badge-danger">-${Math.abs(r.deficit)}</span></td>
+        <td>
+          ${parseInt(r.qtd_pre_triagem, 10) > 0
+            ? `<span class="badge badge-warning">${r.qtd_pre_triagem} em Pré-Triagem</span>`
+            : `<span class="badge badge-gray">0 em Pré-Triagem</span>`
+          }
+        </td>
+        <td>
+          ${r.tem_solicitacao_ativa
+            ? `<span class="badge badge-info">Solicitação Ativa</span>`
+            : ''
+          }
+        </td>
+        <td>
+          <div class="action-group">
+            ${!r.tem_solicitacao_ativa ? `
+              <button class="btn btn-sm btn-warning" onclick="Reparo.abrirModalSolicitarLote(${r.id}, '${escapeHtml(r.nome)}')" title="Solicitar ao almoxarife para descer um pallet deste modelo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Solicitar Lote
+              </button>
+            ` : `
+              <button class="btn btn-sm btn-outline" disabled title="Já existe solicitação ativa">
+                Solicitado
+              </button>
+            `}
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ════════════════════════════════════════════════════════
+  // TABELA DE PRIORIDADES (fila de reparo)
+  // ════════════════════════════════════════════════════════
+
+  async function _carregarFila() {
     const tbody = document.getElementById('tbody-reparo');
     tbody.innerHTML = `<tr><td colspan="8" class="empty-row"><span class="spinner"></span></td></tr>`;
     try {
@@ -240,7 +319,7 @@ const Reparo = (() => {
       const res = await Api.reparo.iniciar(_reparoSelecionadoId);
       Toast.success(res.message || 'Reparo iniciado!');
       await selecionarReparo(_reparoSelecionadoId);
-      await carregar(); // Atualiza tabela
+      await _carregarFila(); // Atualiza tabela
     } catch (err) {
       Toast.error('Erro', err.message);
       btn.disabled = false;
@@ -256,38 +335,45 @@ const Reparo = (() => {
       const res = await Api.reparo.pausar(_reparoSelecionadoId);
       Toast.info(res.message || 'Reparo pausado.');
       await selecionarReparo(_reparoSelecionadoId);
-      await carregar();
+      await _carregarFila();
     } catch (err) {
       Toast.error('Erro', err.message);
       btn.disabled = false;
     }
   }
 
+  // ── Modal Finalizar (com opção de destino) ──────────────
   function abrirModalFinalizar() {
     if (!_reparoSelecionadoId) return;
 
-    const obs       = document.getElementById('rp-diagnostico')?.value || '';
-    const problema  = document.getElementById('rp-problema')?.value    || '';
+    const obs      = document.getElementById('rp-diagnostico')?.value || '';
+    const problema = document.getElementById('rp-problema')?.value    || '';
 
     Modal.abrir({
       titulo: 'Finalizar Reparo',
+      tamanho: 'lg',
       corpo: `
-        <div style="margin-bottom:1rem">
-          <p style="color:var(--c-text-secondary);font-size:13px">
-            Ao finalizar, o equipamento voltará automaticamente ao status
-            <strong>Reposição</strong>.
-          </p>
-        </div>
         <div class="form-grid-1">
           <div class="form-group">
             <label for="fin-diagnostico">Diagnóstico Final *</label>
             <textarea id="fin-diagnostico" class="input-textarea" rows="3"
-              placeholder="Descreva o que foi feito...">${escapeHtml(obs)}</textarea>
+              placeholder="Descreva o que foi feito, peças trocadas, resultado...">${escapeHtml(obs)}</textarea>
           </div>
           <div class="form-group">
             <label for="fin-obs">Observações Finais</label>
             <textarea id="fin-obs" class="input-textarea" rows="2"
               placeholder="Notas adicionais...">${escapeHtml(problema)}</textarea>
+          </div>
+          <div class="form-group">
+            <label for="fin-destino">Destino do Equipamento *</label>
+            <select id="fin-destino" class="input-select">
+              <option value="reposicao">Reposição (consertado — volta ao estoque disponível)</option>
+              <option value="pre_venda">Pré-Venda (sem conserto — encaminhar para venda/sucata)</option>
+              <option value="venda">Venda / Sucata (baixa imediata — sai do WMS)</option>
+            </select>
+            <p style="margin-top:6px;font-size:12px;color:var(--c-text-muted)" id="fin-destino-hint">
+              O equipamento voltará ao estoque disponível para reposição.
+            </p>
           </div>
         </div>
       `,
@@ -298,11 +384,24 @@ const Reparo = (() => {
         </button>
       `,
     });
+
+    // Atualiza hint ao mudar destino
+    setTimeout(() => {
+      document.getElementById('fin-destino')?.addEventListener('change', (e) => {
+        const hints = {
+          reposicao: 'O equipamento voltará ao estoque disponível para reposição.',
+          pre_venda: 'O equipamento irá para a Prateleira de Pré-Venda aguardando destinação.',
+          venda:     'O equipamento será baixado e removido do WMS (operação irreversível).',
+        };
+        document.getElementById('fin-destino-hint').textContent = hints[e.target.value] || '';
+      });
+    }, 100);
   }
 
   async function _confirmarFinalizar() {
-    const diagnostico      = document.getElementById('fin-diagnostico')?.value.trim();
+    const diagnostico        = document.getElementById('fin-diagnostico')?.value.trim();
     const observacoes_finais = document.getElementById('fin-obs')?.value.trim();
+    const status_destino     = document.getElementById('fin-destino')?.value || 'reposicao';
 
     if (!diagnostico) { Toast.warning('Preencha o diagnóstico final.'); return; }
 
@@ -311,7 +410,7 @@ const Reparo = (() => {
 
     try {
       const res = await Api.reparo.finalizar(_reparoSelecionadoId, {
-        diagnostico, observacoes_finais,
+        diagnostico, observacoes_finais, status_destino,
       });
       Toast.success('Reparo finalizado!', res.message);
       document.getElementById('timer-display').style.color = 'var(--c-success)';
@@ -335,6 +434,48 @@ const Reparo = (() => {
     }
   }
 
+  // ════════════════════════════════════════════════════════
+  // SOLICITAR LOTE (botão no painel de críticos)
+  // ════════════════════════════════════════════════════════
+
+  function abrirModalSolicitarLote(catalogoId, nomeModelo) {
+    Modal.abrir({
+      titulo: 'Solicitar Descida de Lote',
+      corpo: `
+        <p>Você está solicitando ao almoxarife que desça um pallet/lote do modelo:</p>
+        <p style="margin:12px 0;font-size:16px;font-weight:700">${escapeHtml(nomeModelo)}</p>
+        <div class="form-group">
+          <label for="sol-obs">Observações para o almoxarife</label>
+          <textarea id="sol-obs" class="input-textarea" rows="3"
+            placeholder="Ex: Preciso urgente de 5 unidades para reparos da semana..."></textarea>
+        </div>
+      `,
+      rodape: `
+        <button class="btn btn-outline" onclick="Modal.fechar()">Cancelar</button>
+        <button class="btn btn-warning" onclick="Reparo._confirmarSolicitarLote(${catalogoId})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Enviar Solicitação
+        </button>
+      `,
+    });
+  }
+
+  async function _confirmarSolicitarLote(catalogoId) {
+    const observacao = document.getElementById('sol-obs')?.value.trim();
+    Modal.fechar();
+
+    try {
+      const res = await Api.reparo.solicitarLote({
+        item_catalogo_id: catalogoId,
+        observacao,
+      });
+      Toast.success('Solicitação enviada!', res.message);
+      await _carregarCriticos(); // Atualiza painel de críticos (botão vira "Solicitado")
+    } catch (err) {
+      Toast.error('Erro ao solicitar lote', err.message);
+    }
+  }
+
   // ── Fechar painel ─────────────────────────────────────────
   function fecharPainel() {
     _pararTimer();
@@ -348,7 +489,9 @@ const Reparo = (() => {
 
   return {
     carregar, selecionarReparo, fecharPainel,
+    renderizarTabela,
     iniciar, pausar, abrirModalFinalizar, _confirmarFinalizar,
     salvarNotas,
+    abrirModalSolicitarLote, _confirmarSolicitarLote,
   };
 })();

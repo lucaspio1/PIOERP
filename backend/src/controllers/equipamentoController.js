@@ -10,7 +10,7 @@ exports.list = async (req, res, next) => {
     const conditions = [];
 
     if (status) {
-      const validos = ['reposicao', 'ag_triagem', 'venda', 'em_uso'];
+      const validos = ['reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda'];
       if (!validos.includes(status)) {
         const e = new Error(`Status inválido. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
       }
@@ -235,6 +235,109 @@ await client.query(
       success: true,
       message: acao.descricao,
       data: { equipamento_id: id, status_novo: acao.novo_status, reparo },
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+// ── MONTAR PALLET / TRANSFERÊNCIA EM LOTE ────────────────────────────────────
+// POST /api/equipamento/montar-pallet
+// Transfere múltiplos equipamentos em pré-triagem ou pré-venda para uma caixa
+// definitiva no porta-pallet, alterando o status para ag_triagem ou venda.
+exports.montarPallet = async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { equipamento_ids, caixa_destino_id, status_destino, observacao } = req.body;
+
+    // Validações
+    if (!Array.isArray(equipamento_ids) || !equipamento_ids.length) {
+      const e = new Error('"equipamento_ids" deve ser um array não vazio.'); e.status = 400; throw e;
+    }
+    if (!caixa_destino_id) {
+      const e = new Error('"caixa_destino_id" é obrigatório.'); e.status = 400; throw e;
+    }
+
+    const statusPermitidos = ['ag_triagem', 'venda'];
+    if (!statusPermitidos.includes(status_destino)) {
+      const e = new Error(`"status_destino" inválido. Aceitos: ${statusPermitidos.join(', ')}`); e.status = 400; throw e;
+    }
+
+    // Valida que a caixa de destino existe e é do nível correto
+    const caixa = await client.query(
+      `SELECT id, nivel FROM endereco_fisico WHERE id = $1 AND ativo = TRUE`, [caixa_destino_id]
+    );
+    if (!caixa.rows.length || caixa.rows[0].nivel !== 'caixa') {
+      const e = new Error('Caixa de destino inválida. Deve ser uma caixa (nível 4) ativa.'); e.status = 400; throw e;
+    }
+
+    // Busca todos os equipamentos selecionados de uma vez
+    const equipRes = await client.query(
+      `SELECT id, status, item_catalogo_id, caixa_id
+       FROM equipamento_fisico
+       WHERE id = ANY($1::int[])`,
+      [equipamento_ids]
+    );
+
+    if (equipRes.rows.length !== equipamento_ids.length) {
+      const e = new Error('Um ou mais equipamentos não foram encontrados.'); e.status = 404; throw e;
+    }
+
+    // Valida que todos estão em status permitido para esta operação
+    const statusOrigem = ['pre_triagem', 'pre_venda'];
+    const invalidos = equipRes.rows.filter(e => !statusOrigem.includes(e.status));
+    if (invalidos.length) {
+      const e = new Error(
+        `${invalidos.length} equipamento(s) não estão em pré-triagem ou pré-venda e não podem ser transferidos.`
+      ); e.status = 409; throw e;
+    }
+
+    const resultados = [];
+
+    for (const equip of equipRes.rows) {
+      // Atualiza status e endereço
+      const novaVendaCaixaId = status_destino === 'venda' ? null : caixa_destino_id;
+      await client.query(
+        `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
+        [status_destino, novaVendaCaixaId, equip.id]
+      );
+
+      // Registra histórico
+      await client.query(
+        `INSERT INTO historico_movimentacao
+           (equipamento_id, tipo, status_anterior, status_novo, endereco_origem_id, endereco_destino_id, observacao)
+         VALUES ($1, 'transferencia_lote', $2, $3, $4, $5, $6)`,
+        [equip.id, equip.status, status_destino, equip.caixa_id, novaVendaCaixaId, observacao?.trim() || null]
+      );
+
+      // Se vai para triagem, cria ordem de reparo automaticamente
+      if (status_destino === 'ag_triagem') {
+        const reparoAtivo = await client.query(
+          `SELECT id FROM reparo WHERE equipamento_id = $1 AND status != 'finalizado' LIMIT 1`,
+          [equip.id]
+        );
+        if (!reparoAtivo.rows.length) {
+          await client.query(
+            `INSERT INTO reparo (equipamento_id, status, descricao_problema)
+             VALUES ($1, 'aguardando', $2)`,
+            [equip.id, observacao?.trim() || null]
+          );
+        }
+      }
+
+      resultados.push({ equipamento_id: equip.id, status_novo: status_destino });
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: `${resultados.length} equipamento(s) transferidos para ${status_destino === 'ag_triagem' ? 'Ag. Triagem' : 'Venda'}.`,
+      data: resultados,
     });
   } catch (err) {
     await client.query('ROLLBACK');

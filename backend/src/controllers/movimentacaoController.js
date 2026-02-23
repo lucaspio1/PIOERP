@@ -56,11 +56,13 @@ exports.getDashboard = async (req, res, next) => {
     const [totais, criticos, recentes] = await Promise.all([
       db.query(`
         SELECT
-          COUNT(*)                                        AS total_equipamentos,
-          COUNT(*) FILTER (WHERE status = 'reposicao')   AS em_reposicao,
-          COUNT(*) FILTER (WHERE status = 'ag_triagem')  AS em_triagem,
-          COUNT(*) FILTER (WHERE status = 'venda')       AS em_venda,
-          COUNT(*) FILTER (WHERE status = 'em_uso')      AS em_uso
+          COUNT(*)                                          AS total_equipamentos,
+          COUNT(*) FILTER (WHERE status = 'reposicao')     AS em_reposicao,
+          COUNT(*) FILTER (WHERE status = 'ag_triagem')    AS em_triagem,
+          COUNT(*) FILTER (WHERE status = 'venda')         AS em_venda,
+          COUNT(*) FILTER (WHERE status = 'em_uso')        AS em_uso,
+          COUNT(*) FILTER (WHERE status = 'pre_triagem')   AS em_pre_triagem,
+          COUNT(*) FILTER (WHERE status = 'pre_venda')     AS em_pre_venda
         FROM equipamento_fisico
       `),
       db.query(`SELECT COUNT(*) AS total FROM v_estoque_por_catalogo WHERE estoque_critico = TRUE`),
