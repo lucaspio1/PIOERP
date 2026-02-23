@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Dependências (reinstaladas dentro da imagem)
+node_modules
+backend/node_modules
+
+# Arquivos de ambiente (nunca entram na imagem)
+.env
+.env.*
+!backend/.env.example
+
+# Logs e temporários
+*.log
+npm-debug.log*
+.npm
+
+# Scripts e configs de dev
+*.sh
+docker-compose*.yml
+Dockerfile*
+
+# Banco de dados (montado como volume)
+database/
+
+# Editor
+.vscode
+.idea
+*.swp

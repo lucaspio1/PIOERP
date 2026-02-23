@@ -1,0 +1,59 @@
+# =============================================================================
+# PIOERP — Docker Compose
+# Uso: ./start.sh   ou   docker compose up --build -d
+# =============================================================================
+name: pioerp
+
+services:
+
+  # ── Banco de dados ──────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: pioerp_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       pioerp
+      POSTGRES_USER:     pioerp
+      POSTGRES_PASSWORD: pioerp123
+    ports:
+      - "5432:5432"        # exposto para acesso via DBeaver/pgAdmin no Windows
+    volumes:
+      - pioerp_pgdata:/var/lib/postgresql/data
+      # Schema SQL executado automaticamente na PRIMEIRA inicialização
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pioerp -d pioerp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # ── API + Frontend ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .            # raiz do projeto (inclui backend/ e frontend/)
+      dockerfile: Dockerfile
+    container_name: pioerp_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV:       production
+      PORT:           3000
+      # Banco
+      DB_HOST:        db
+      DB_PORT:        5432
+      DB_NAME:        pioerp
+      DB_USER:        pioerp
+      DB_PASSWORD:    pioerp123
+      DB_POOL_MAX:    10
+      # Frontend (dentro da imagem — copiado pelo Dockerfile)
+      FRONTEND_PATH:  /app/frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy   # aguarda healthcheck do Postgres passar
+
+# ── Volume persistente do Postgres ─────────────────────────────────────────────
+volumes:
+  pioerp_pgdata:
+    name: pioerp_pgdata
