@@ -118,6 +118,7 @@ function badgeStatus(status) {
     reposicao:  'Reposição',
     ag_triagem: 'Ag. Triagem',
     venda:      'Venda',
+    em_uso:     'Em Uso',
   };
   return `<span class="badge status-${status}">${labels[status] || status}</span>`;
 }
