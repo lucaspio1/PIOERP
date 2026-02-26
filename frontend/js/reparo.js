@@ -155,7 +155,7 @@ const Reparo = (() => {
               ${formatMinutos(r.total_minutos_trabalhados)}
             </span>
           </td>
-          <td style="font-size:12px">${escapeHtml(r.caixa_codigo || '—')}</td>
+          <td style="font-size:12px"><code>${escapeHtml(r.endereco_codigo || r.caixa_codigo || '—')}</code></td>
           <td>
             <div class="action-group">
               <button
@@ -192,10 +192,8 @@ const Reparo = (() => {
       document.getElementById('rp-serie').textContent      = r.numero_serie;
       document.getElementById('rp-imobilizado').textContent = r.imobilizado;
 
-      // Monta localização
-      const loc = [r.porta_pallet_codigo, r.sessao_codigo, r.pallet_codigo, r.caixa_codigo]
-        .filter(Boolean).join(' › ');
-      document.getElementById('rp-local').textContent = loc || '—';
+      // Endereço físico plano
+      document.getElementById('rp-local').textContent = r.endereco_codigo || r.caixa_codigo || '—';
 
       // Preenche textarea de notas
       document.getElementById('rp-problema').value    = r.descricao_problema   || '';

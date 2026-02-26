@@ -1,21 +1,21 @@
 /**
  * PIOERP — Módulo: Endereços WMS
- * Gerenciamento da hierarquia fisica porta_pallet > sessao > pallet > caixa.
+ * Endereços planos no formato PP01.S{sessao}.N{nivel}.{lado}
  */
 
 const Endereco = (() => {
   let _dados = [];
 
   // ── Listar ──────────────────────────────────────────────
-  async function carregar(nivel) {
+  async function carregar() {
     const tbody = document.getElementById('tbody-enderecos');
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-row"><span class="spinner"></span></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-row"><span class="spinner"></span></td></tr>`;
     try {
-      const res = await Api.endereco.listar(nivel || '');
+      const res = await Api.endereco.listar();
       _dados = res.data;
       renderizar(_dados);
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</td></tr>`;
       Toast.error('Erro ao carregar endereços', err.message);
     }
   }
@@ -23,7 +23,7 @@ const Endereco = (() => {
   function renderizar(lista) {
     const tbody = document.getElementById('tbody-enderecos');
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-row">Nenhum endereço cadastrado.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-row">Nenhum endereço cadastrado.</td></tr>`;
       return;
     }
     tbody.innerHTML = lista.map(r => `
@@ -31,8 +31,6 @@ const Endereco = (() => {
         <td><span style="color:var(--c-text-muted);font-size:12px">#${r.id}</span></td>
         <td><code style="font-size:12px">${escapeHtml(r.codigo)}</code></td>
         <td>${escapeHtml(r.descricao || '—')}</td>
-        <td>${badgeNivel(r.nivel)}</td>
-        <td>${r.parent_codigo ? `<code style="font-size:12px">${escapeHtml(r.parent_codigo)}</code>` : '—'}</td>
         <td>${r.ativo
           ? `<span class="badge badge-success">Ativo</span>`
           : `<span class="badge badge-gray">Inativo</span>`
@@ -50,65 +48,39 @@ const Endereco = (() => {
   }
 
   // ── Modal Criação ────────────────────────────────────────
-  async function abrirModalCriacao() {
-    // Precisamos dos endereços pai disponíveis
-    let pais = [];
-    try {
-      const res = await Api.endereco.listar();
-      pais = res.data;
-    } catch {}
-
+  function abrirModalCriacao() {
     Modal.abrir({
       titulo: 'Novo Endereço WMS',
-      corpo: _formHtml({}, pais),
+      corpo: `
+        <div class="form-grid-1">
+          <div class="form-group">
+            <label for="end-codigo">Código *</label>
+            <input id="end-codigo" class="input-text" type="text" placeholder="Ex: PP01.S1.N3.0" />
+          </div>
+          <div class="form-group">
+            <label for="end-descricao">Descrição</label>
+            <input id="end-descricao" class="input-text" type="text" placeholder="Descrição opcional..." />
+          </div>
+        </div>
+      `,
       rodape: `
         <button class="btn btn-outline" onclick="Modal.fechar()">Cancelar</button>
         <button class="btn btn-primary" onclick="Endereco._submitCriacao()">Criar Endereço</button>
       `,
     });
-    // Bind para atualizar o select de pai ao mudar o nível
-    document.getElementById('end-nivel')?.addEventListener('change', () => {
-      _atualizarSelectPai(pais);
-    });
-  }
-
-  function _atualizarSelectPai(pais) {
-    const nivel = document.getElementById('end-nivel')?.value;
-    const selectPai = document.getElementById('end-parent');
-    if (!selectPai) return;
-
-    const nivelPaiEsperado = {
-      sessao: 'porta_pallet',
-      pallet: 'sessao',
-      caixa:  'pallet',
-    }[nivel];
-
-    if (!nivelPaiEsperado) {
-      selectPai.innerHTML = '<option value="">N/A — Porta-Pallets não têm pai</option>';
-      selectPai.disabled = true;
-      return;
-    }
-
-    const filtrados = pais.filter(p => p.nivel === nivelPaiEsperado && p.ativo);
-    selectPai.disabled = false;
-    selectPai.innerHTML = `<option value="">Selecione o pai (${nivelPaiEsperado.replace('_', '-')})...</option>` +
-      filtrados.map(p => `<option value="${p.id}">${escapeHtml(p.codigo)} — ${escapeHtml(p.descricao || '')}</option>`).join('');
   }
 
   async function _submitCriacao() {
     const codigo    = document.getElementById('end-codigo')?.value.trim();
     const descricao = document.getElementById('end-descricao')?.value.trim();
-    const nivel     = document.getElementById('end-nivel')?.value;
-    const parent_id = document.getElementById('end-parent')?.value || null;
 
-    if (!codigo)  { Toast.warning('Informe o código do endereço.'); return; }
-    if (!nivel)   { Toast.warning('Selecione o nível.');            return; }
+    if (!codigo) { Toast.warning('Informe o código do endereço.'); return; }
 
     try {
-      await Api.endereco.criar({ codigo, descricao, nivel, parent_id: parent_id || undefined });
+      await Api.endereco.criar({ codigo, descricao });
       Modal.fechar();
       Toast.success('Endereço criado com sucesso!', codigo);
-      carregar(document.getElementById('filter-nivel')?.value || '');
+      carregar();
     } catch (err) {
       Toast.error('Erro ao criar endereço', err.message);
     }
@@ -130,10 +102,6 @@ const Endereco = (() => {
           <div class="form-group">
             <label for="edit-end-descricao">Descrição</label>
             <input id="edit-end-descricao" class="input-text" type="text" value="${escapeHtml(item.descricao || '')}" />
-          </div>
-          <div class="form-group">
-            <label>Nível (não editável)</label>
-            <div>${badgeNivel(item.nivel)}</div>
           </div>
           <div class="form-group">
             <label for="edit-end-ativo">Status</label>
@@ -160,42 +128,10 @@ const Endereco = (() => {
       await Api.endereco.atualizar(id, { codigo, descricao, ativo });
       Modal.fechar();
       Toast.success('Endereço atualizado!');
-      carregar(document.getElementById('filter-nivel')?.value || '');
+      carregar();
     } catch (err) {
       Toast.error('Erro ao atualizar endereço', err.message);
     }
-  }
-
-  // ── Helpers ──────────────────────────────────────────────
-  function _formHtml(r, pais) {
-    return `
-      <div class="form-grid-1">
-        <div class="form-group">
-          <label for="end-codigo">Código *</label>
-          <input id="end-codigo" class="input-text" type="text" value="${escapeHtml(r.codigo || '')}" placeholder="Ex: PP-01-A-P01-CX03" />
-        </div>
-        <div class="form-group">
-          <label for="end-descricao">Descrição</label>
-          <input id="end-descricao" class="input-text" type="text" value="${escapeHtml(r.descricao || '')}" placeholder="Descrição opcional..." />
-        </div>
-        <div class="form-group">
-          <label for="end-nivel">Nível *</label>
-          <select id="end-nivel" class="input-select">
-            <option value="">Selecione o nível...</option>
-            <option value="porta_pallet">Nível 1 — Porta-Pallet</option>
-            <option value="sessao">Nível 2 — Sessão</option>
-            <option value="pallet">Nível 3 — Pallet</option>
-            <option value="caixa">Nível 4 — Caixa</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="end-parent">Endereço Pai</label>
-          <select id="end-parent" class="input-select" disabled>
-            <option value="">Selecione o nível primeiro...</option>
-          </select>
-        </div>
-      </div>
-    `;
   }
 
   return { carregar, renderizar, abrirModalCriacao, abrirModalEdicao, _submitCriacao, _submitEdicao };

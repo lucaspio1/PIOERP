@@ -191,11 +191,11 @@ exports.finalizar = async (req, res, next) => {
 
     const { id } = req.params;
     // status_destino vem do frontend com o local escolhido pelo técnico
-    const { observacoes_finais, diagnostico, status_destino = 'reposicao', caixa_destino_id } = req.body || {};
+    const { observacoes_finais, diagnostico, status_destino = 'reposicao', endereco_destino_id, caixa_destino_id } = req.body || {};
+    const enderecoDestino = endereco_destino_id || caixa_destino_id;
 
-    // Alteração importante: fazer o JOIN para buscar a `caixa_id` atual no equipamento_fisico
     const rep = await client.query(`
-      SELECT r.*, ef.caixa_id AS equip_caixa_id
+      SELECT r.*, ef.endereco_id AS equip_endereco_id
       FROM reparo r
       JOIN equipamento_fisico ef ON ef.id = r.equipamento_id
       WHERE r.id = $1
@@ -239,12 +239,12 @@ exports.finalizar = async (req, res, next) => {
 
     // Define se o item continua no WMS
     const removerDoWms = (status_destino === 'venda');
-    const novaCaixa = removerDoWms ? null : (caixa_destino_id || reparo.equip_caixa_id);
+    const novoEndereco = removerDoWms ? null : (enderecoDestino || reparo.equip_endereco_id);
 
     // Atualiza o status do equipamento e, se aplicável, desvincula do endereço físico
     await client.query(
-      `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
-      [status_destino, novaCaixa, reparo.equipamento_id]
+      `UPDATE equipamento_fisico SET status = $1, endereco_id = $2 WHERE id = $3`,
+      [status_destino, novoEndereco, reparo.equipamento_id]
     );
 
     // Registra histórico

@@ -29,17 +29,11 @@ exports.list = async (req, res, next) => {
         ic.id   AS item_catalogo_id,
         ic.nome AS modelo,
         ic.categoria,
-        e4.id     AS caixa_id,
-        e4.codigo AS caixa_codigo,
-        e3.codigo AS pallet_codigo,
-        e2.codigo AS sessao_codigo,
-        e1.codigo AS porta_pallet_codigo
+        end_f.id     AS endereco_id,
+        end_f.codigo AS endereco_codigo
       FROM equipamento_fisico ef
       JOIN item_catalogo ic ON ic.id = ef.item_catalogo_id
-      LEFT JOIN endereco_fisico e4 ON e4.id = ef.caixa_id
-      LEFT JOIN endereco_fisico e3 ON e3.id = e4.parent_id
-      LEFT JOIN endereco_fisico e2 ON e2.id = e3.parent_id
-      LEFT JOIN endereco_fisico e1 ON e1.id = e2.parent_id
+      LEFT JOIN endereco_fisico end_f ON end_f.id = ef.endereco_id
       ${where}
       ORDER BY ef.updated_at DESC
     `, params);
@@ -56,14 +50,10 @@ exports.getById = async (req, res, next) => {
       SELECT
         ef.*, ic.nome AS modelo, ic.categoria,
         ic.estoque_minimo, ic.estoque_maximo,
-        e4.codigo AS caixa_codigo, e3.codigo AS pallet_codigo,
-        e2.codigo AS sessao_codigo, e1.codigo AS porta_pallet_codigo
+        end_f.codigo AS endereco_codigo
       FROM equipamento_fisico ef
       JOIN item_catalogo ic ON ic.id = ef.item_catalogo_id
-      LEFT JOIN endereco_fisico e4 ON e4.id = ef.caixa_id
-      LEFT JOIN endereco_fisico e3 ON e3.id = e4.parent_id
-      LEFT JOIN endereco_fisico e2 ON e2.id = e3.parent_id
-      LEFT JOIN endereco_fisico e1 ON e1.id = e2.parent_id
+      LEFT JOIN endereco_fisico end_f ON end_f.id = ef.endereco_id
       WHERE ef.id = $1
     `, [id]);
 
@@ -82,13 +72,14 @@ exports.entrada = async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    const { item_catalogo_id, numero_serie, imobilizado, caixa_id, tipo_entrada, observacao } = req.body;
+    const { item_catalogo_id, numero_serie, imobilizado, endereco_id, caixa_id, tipo_entrada, observacao } = req.body;
+    const enderecoDestino = endereco_id || caixa_id; // aceita ambos por compatibilidade
 
     // Validações
-    if (!item_catalogo_id) { const e = new Error('"item_catalogo_id" é obrigatório.'); e.status = 400; throw e; }
-    if (!numero_serie?.trim()) { const e = new Error('"numero_serie" é obrigatório.');  e.status = 400; throw e; }
-    if (!imobilizado?.trim())  { const e = new Error('"imobilizado" é obrigatório.');   e.status = 400; throw e; }
-    if (!caixa_id)             { const e = new Error('"caixa_id" é obrigatório.');      e.status = 400; throw e; }
+    if (!item_catalogo_id)     { const e = new Error('"item_catalogo_id" é obrigatório.'); e.status = 400; throw e; }
+    if (!numero_serie?.trim()) { const e = new Error('"numero_serie" é obrigatório.');     e.status = 400; throw e; }
+    if (!imobilizado?.trim())  { const e = new Error('"imobilizado" é obrigatório.');      e.status = 400; throw e; }
+    if (!enderecoDestino)      { const e = new Error('"endereco_id" é obrigatório.');      e.status = 400; throw e; }
 
 const tiposValidos = ['entrada_compra', 'entrada_retorno_reparo', 'entrada_recebimento'];
     const tipo = tipo_entrada || 'entrada_compra';
@@ -113,31 +104,31 @@ const tiposValidos = ['entrada_compra', 'entrada_retorno_reparo', 'entrada_receb
       throw e;
     }
 
-    // Verifica se a caixa existe e é do nível correto
-    const caixa = await client.query(
-      `SELECT id, nivel FROM endereco_fisico WHERE id = $1 AND ativo = TRUE`, [caixa_id]
+    // Verifica se o endereço existe e está ativo
+    const endCheck = await client.query(
+      `SELECT id FROM endereco_fisico WHERE id = $1 AND ativo = TRUE`, [enderecoDestino]
     );
-    if (!caixa.rows.length || caixa.rows[0].nivel !== 'caixa') {
-      const e = new Error('Endereço de destino inválido. Deve ser uma caixa (nível 4).'); 
-      e.status = 400; 
+    if (!endCheck.rows.length) {
+      const e = new Error('Endereço de destino não encontrado ou inativo.');
+      e.status = 400;
       throw e;
     }
 
-    // Insere o equipamento (usando $4 para o statusInicial)
+    // Insere o equipamento
     const equip = await client.query(
       `INSERT INTO equipamento_fisico
-         (item_catalogo_id, numero_serie, imobilizado, status, caixa_id, observacoes)
+         (item_catalogo_id, numero_serie, imobilizado, status, endereco_id, observacoes)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [item_catalogo_id, numero_serie.trim(), imobilizado.trim(), statusInicial, caixa_id, observacao?.trim() || null]
+      [item_catalogo_id, numero_serie.trim(), imobilizado.trim(), statusInicial, enderecoDestino, observacao?.trim() || null]
     );
 
-    // Registra no histórico (usando $3 para o statusInicial)
+    // Registra no histórico
     await client.query(
       `INSERT INTO historico_movimentacao
          (equipamento_id, tipo, status_anterior, status_novo, endereco_destino_id, observacao)
        VALUES ($1, $2, NULL, $3, $4, $5)`,
-      [equip.rows[0].id, tipo, statusInicial, caixa_id, observacao?.trim() || null]
+      [equip.rows[0].id, tipo, statusInicial, enderecoDestino, observacao?.trim() || null]
     );
 
     await client.query('COMMIT');
@@ -160,7 +151,8 @@ exports.saida = async (req, res, next) => {
     await client.query('BEGIN');
 
     const { id } = req.params;
-    const { status_destino, caixa_destino_id, observacao } = req.body;
+    const { status_destino, endereco_destino_id, caixa_destino_id, observacao } = req.body;
+    const enderecoDestino = endereco_destino_id || caixa_destino_id; // aceita ambos
 
     const statusValidos = ['reposicao', 'ag_triagem', 'venda', 'saida_uso'];
     if (!status_destino) {
@@ -197,11 +189,11 @@ exports.saida = async (req, res, next) => {
 
 // Se for saída para uso ou venda (baixa), o equipamento perde o endereço físico (sai do estoque WMS)
 const vaiSairDoEstoque = (acao.novo_status === 'em_uso' || acao.novo_status === 'venda');
-const novaCaixaId = vaiSairDoEstoque ? null : (caixa_destino_id || atual.caixa_id);
+const novoEnderecoId = vaiSairDoEstoque ? null : (enderecoDestino || atual.endereco_id);
 
 await client.query(
-  `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
-  [acao.novo_status, novaCaixaId, id]
+  `UPDATE equipamento_fisico SET status = $1, endereco_id = $2 WHERE id = $3`,
+  [acao.novo_status, novoEnderecoId, id]
 );
 
     // Registra no histórico
@@ -209,7 +201,7 @@ await client.query(
       `INSERT INTO historico_movimentacao
          (equipamento_id, tipo, status_anterior, status_novo, endereco_origem_id, endereco_destino_id, observacao)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, acao.tipo, atual.status, acao.novo_status, atual.caixa_id, novaCaixaId, observacao?.trim() || null]
+      [id, acao.tipo, atual.status, acao.novo_status, atual.endereco_id, novoEnderecoId, observacao?.trim() || null]
     );
 
     // Se vai para triagem, cria ordem de reparo automaticamente
@@ -253,14 +245,15 @@ exports.montarPallet = async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    const { equipamento_ids, caixa_destino_id, status_destino, observacao } = req.body;
+    const { equipamento_ids, endereco_destino_id, caixa_destino_id, status_destino, observacao } = req.body;
+    const enderecoDestino = endereco_destino_id || caixa_destino_id;
 
     // Validações
     if (!Array.isArray(equipamento_ids) || !equipamento_ids.length) {
       const e = new Error('"equipamento_ids" deve ser um array não vazio.'); e.status = 400; throw e;
     }
-    if (!caixa_destino_id) {
-      const e = new Error('"caixa_destino_id" é obrigatório.'); e.status = 400; throw e;
+    if (!enderecoDestino) {
+      const e = new Error('"endereco_destino_id" é obrigatório.'); e.status = 400; throw e;
     }
 
     const statusPermitidos = ['ag_triagem', 'venda'];
@@ -268,17 +261,17 @@ exports.montarPallet = async (req, res, next) => {
       const e = new Error(`"status_destino" inválido. Aceitos: ${statusPermitidos.join(', ')}`); e.status = 400; throw e;
     }
 
-    // Valida que a caixa de destino existe e é do nível correto
-    const caixa = await client.query(
-      `SELECT id, nivel FROM endereco_fisico WHERE id = $1 AND ativo = TRUE`, [caixa_destino_id]
+    // Valida que o endereço de destino existe e está ativo
+    const endCheck = await client.query(
+      `SELECT id FROM endereco_fisico WHERE id = $1 AND ativo = TRUE`, [enderecoDestino]
     );
-    if (!caixa.rows.length || caixa.rows[0].nivel !== 'caixa') {
-      const e = new Error('Caixa de destino inválida. Deve ser uma caixa (nível 4) ativa.'); e.status = 400; throw e;
+    if (!endCheck.rows.length) {
+      const e = new Error('Endereço de destino não encontrado ou inativo.'); e.status = 400; throw e;
     }
 
     // Busca todos os equipamentos selecionados de uma vez
     const equipRes = await client.query(
-      `SELECT id, status, item_catalogo_id, caixa_id
+      `SELECT id, status, item_catalogo_id, endereco_id
        FROM equipamento_fisico
        WHERE id = ANY($1::int[])`,
       [equipamento_ids]
@@ -301,10 +294,10 @@ exports.montarPallet = async (req, res, next) => {
 
     for (const equip of equipRes.rows) {
       // Atualiza status e endereço
-      const novaVendaCaixaId = status_destino === 'venda' ? null : caixa_destino_id;
+      const novoEndDest = status_destino === 'venda' ? null : enderecoDestino;
       await client.query(
-        `UPDATE equipamento_fisico SET status = $1, caixa_id = $2 WHERE id = $3`,
-        [status_destino, novaVendaCaixaId, equip.id]
+        `UPDATE equipamento_fisico SET status = $1, endereco_id = $2 WHERE id = $3`,
+        [status_destino, novoEndDest, equip.id]
       );
 
       // Registra histórico
@@ -312,7 +305,7 @@ exports.montarPallet = async (req, res, next) => {
         `INSERT INTO historico_movimentacao
            (equipamento_id, tipo, status_anterior, status_novo, endereco_origem_id, endereco_destino_id, observacao)
          VALUES ($1, 'transferencia_lote', $2, $3, $4, $5, $6)`,
-        [equip.id, equip.status, status_destino, equip.caixa_id, novaVendaCaixaId, observacao?.trim() || null]
+        [equip.id, equip.status, status_destino, equip.endereco_id, novoEndDest, observacao?.trim() || null]
       );
 
       // Se vai para triagem, cria ordem de reparo automaticamente

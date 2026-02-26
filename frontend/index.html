@@ -239,15 +239,7 @@
     ───────────────────────────────────────────────── -->
     <section id="section-enderecos" class="page-section">
       <div class="section-toolbar">
-        <div class="toolbar-left">
-          <select id="filter-nivel" class="input-select">
-            <option value="">Todos os níveis</option>
-            <option value="porta_pallet">Porta-Pallet</option>
-            <option value="sessao">Sessão</option>
-            <option value="pallet">Pallet</option>
-            <option value="caixa">Caixa</option>
-          </select>
-        </div>
+        <div class="toolbar-left"></div>
         <div class="toolbar-right">
           <button class="btn btn-primary" onclick="Endereco.abrirModalCriacao()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -265,14 +257,12 @@
                   <th>#</th>
                   <th>Código</th>
                   <th>Descrição</th>
-                  <th>Nível</th>
-                  <th>Endereço Pai</th>
                   <th>Status</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody id="tbody-enderecos">
-                <tr><td colspan="7" class="empty-row">Carregando...</td></tr>
+                <tr><td colspan="5" class="empty-row">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -363,31 +353,11 @@
               </div>
 
               <div class="form-section-title">Destino Físico (WMS)</div>
-              <div class="form-grid-3">
-                <div class="form-group">
-                  <label for="entrada-pp">Porta-Pallet *</label>
-                  <select id="entrada-pp" class="input-select" required onchange="Movimentacao.filtrarSessoes()">
-                    <option value="">Selecione...</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="entrada-sessao">Sessão *</label>
-                  <select id="entrada-sessao" class="input-select" required onchange="Movimentacao.filtrarPallets()" disabled>
-                    <option value="">Selecione um PP primeiro...</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="entrada-pallet">Pallet *</label>
-                  <select id="entrada-pallet" class="input-select" required onchange="Movimentacao.filtrarCaixas()" disabled>
-                    <option value="">Selecione uma Sessão primeiro...</option>
-                  </select>
-                </div>
-              </div>
               <div class="form-grid-2">
                 <div class="form-group">
-                  <label for="entrada-caixa">Caixa de Destino *</label>
-                  <select id="entrada-caixa" class="input-select" required disabled>
-                    <option value="">Selecione um Pallet primeiro...</option>
+                  <label for="entrada-endereco">Endereço de Destino *</label>
+                  <select id="entrada-endereco" class="input-select" required disabled>
+                    <option value="">Carregando endereços...</option>
                   </select>
                 </div>
                 <div class="form-group">
