@@ -8,7 +8,7 @@
 -- -----------------------------------------------------------------------------
 CREATE TYPE nivel_wms AS ENUM ('porta_pallet', 'sessao', 'pallet', 'caixa');
 
-CREATE TYPE status_equip AS ENUM ('reposicao', 'ag_triagem', 'venda');
+CREATE TYPE status_equip AS ENUM ('reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda');
 
 CREATE TYPE tipo_movim AS ENUM (
     'entrada_compra',
