@@ -17,7 +17,9 @@
       "Bash(npm install)",
       "Bash(git add database/schema.sql backend/package-lock.json)",
       "Bash(git add frontend/js/reparo.js backend/src/controllers/reparoController.js)",
-      "Bash(git add -A)"
+      "Bash(git add -A)",
+      "Bash(git rm -r --cached backend/node_modules/)",
+      "Bash(git add .gitignore)"
     ]
   }
 }
