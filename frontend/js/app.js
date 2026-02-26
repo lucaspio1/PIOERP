@@ -165,6 +165,7 @@ const App = (() => {
     'dashboard':    { title: 'Dashboard',                onEnter: () => Dashboard.carregar() },
     'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => Catalogo.carregar() },
     'enderecos':    { title: 'Endereços WMS',             onEnter: () => Endereco.carregar() },
+    'wms-mapa':     { title: 'Mapa Porta-Pallet',         onEnter: () => WmsMapa.init() },
     'equipamentos': { title: 'Equipamentos',              onEnter: () => Movimentacao.carregarEquipamentos() },
     'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => Movimentacao.inicializarFormEntrada() },
     'saida':        { title: 'Saída / Movimentação',      onEnter: () => {} },
