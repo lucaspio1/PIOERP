@@ -11,9 +11,12 @@ CREATE TYPE status_equip AS ENUM ('reposicao', 'ag_triagem', 'venda', 'em_uso', 
 CREATE TYPE tipo_movim AS ENUM (
     'entrada_compra',
     'entrada_retorno_reparo',
+    'entrada_recebimento',
     'saida_uso',
     'saida_triagem',
-    'saida_venda'
+    'saida_venda',
+    'movimentacao',
+    'transferencia_lote'
 );
 
 CREATE TYPE status_rep AS ENUM ('aguardando', 'em_progresso', 'pausado', 'finalizado');
