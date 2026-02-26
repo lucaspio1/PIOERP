@@ -21,6 +21,8 @@ services:
       - pioerp_pgdata:/var/lib/postgresql/data
       # Schema SQL executado automaticamente na PRIMEIRA inicialização
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/migrations/002_add_em_uso_status.sql:/docker-entrypoint-initdb.d/02_migration_em_uso.sql:ro
+      - ./database/migrations/003_add_recebimento.sql:/docker-entrypoint-initdb.d/03_migration_recebimento.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pioerp -d pioerp"]
       interval: 5s
