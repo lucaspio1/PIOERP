@@ -191,8 +191,23 @@ exports.finalizar = async (req, res, next) => {
 
     const { id } = req.params;
     // status_destino vem do frontend com o local escolhido pelo técnico
-    const { observacoes_finais, diagnostico, status_destino = 'reposicao', endereco_destino_id, caixa_destino_id } = req.body || {};
+    const { observacoes_finais, diagnostico, status_destino = 'reposicao', alocacao_filial, endereco_destino_id, caixa_destino_id } = req.body || {};
     const enderecoDestino = endereco_destino_id || caixa_destino_id;
+
+    const destinosValidos = ['reposicao', 'pre_venda'];
+    if (!destinosValidos.includes(status_destino)) {
+      const e = new Error(`Destino inválido. Ao finalizar reparo use: ${destinosValidos.join(', ')}.`); e.status = 400; throw e;
+    }
+
+    // Reposição exige diagnóstico e filial (item vai para ag_internalizacao)
+    if (status_destino === 'reposicao') {
+      if (!diagnostico?.trim()) {
+        const e = new Error('O diagnóstico é obrigatório ao encaminhar para Reposição.'); e.status = 400; throw e;
+      }
+      if (!alocacao_filial?.trim()) {
+        const e = new Error('"alocacao_filial" é obrigatório ao encaminhar para Reposição.'); e.status = 400; throw e;
+      }
+    }
 
     const rep = await client.query(`
       SELECT r.*, ef.endereco_id AS equip_endereco_id
@@ -237,14 +252,18 @@ exports.finalizar = async (req, res, next) => {
       WHERE id = $4 RETURNING *
     `, [totalFinal, diagnostico || null, observacoes_finais || null, id]);
 
-    // Define se o item continua no WMS
-    const removerDoWms = (status_destino === 'venda');
-    const novoEndereco = removerDoWms ? null : (enderecoDestino || reparo.equip_endereco_id);
+    // Reposição → ag_internalizacao (aguarda validação do administrador)
+    // pre_venda  → pre_venda (sem alteração de fluxo)
+    const statusFinal  = status_destino === 'reposicao' ? 'ag_internalizacao' : status_destino;
+    const filialFinal  = status_destino === 'reposicao' ? alocacao_filial.trim() : null;
+    const novoEndereco = enderecoDestino || reparo.equip_endereco_id;
 
-    // Atualiza o status do equipamento e, se aplicável, desvincula do endereço físico
+    // Atualiza equipamento
     await client.query(
-      `UPDATE equipamento_fisico SET status = $1, endereco_id = $2 WHERE id = $3`,
-      [status_destino, novoEndereco, reparo.equipamento_id]
+      `UPDATE equipamento_fisico
+         SET status = $1, endereco_id = $2, alocacao_filial = $3
+       WHERE id = $4`,
+      [statusFinal, novoEndereco, filialFinal, reparo.equipamento_id]
     );
 
     // Registra histórico

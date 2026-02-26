@@ -74,6 +74,22 @@ const Api = (() => {
       dashboard:      ()        => Api.get('/movimentacao/dashboard'),
     },
 
+    internalizacao: {
+      listar:          ()           => Api.get('/internalizacao'),
+      locaisPorModelo: (catalogo_id) => Api.get(`/internalizacao/locais-por-modelo/${catalogo_id}`),
+      aprovar:         (id, data)   => Api.post(`/internalizacao/${id}/aprovar`, data),
+    },
+
+    pallets: {
+      listar:  (endereco_id) => Api.get(`/pallets${endereco_id ? `?endereco_id=${endereco_id}` : ''}`),
+      criar:   (data)        => Api.post('/pallets', data),
+    },
+
+    caixas: {
+      listar: (pallet_id) => Api.get(`/caixas${pallet_id ? `?pallet_id=${pallet_id}` : ''}`),
+      criar:  (data)      => Api.post('/caixas', data),
+    },
+
     reparo: {
       prioridades:         ()           => Api.get('/reparo/prioridades'),
       criticos:            ()           => Api.get('/reparo/criticos'),

@@ -10,7 +10,7 @@ exports.list = async (req, res, next) => {
     const conditions = [];
 
     if (status) {
-      const validos = ['reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda'];
+      const validos = ['reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda', 'ag_internalizacao'];
       if (!validos.includes(status)) {
         const e = new Error(`Status inválido. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
       }
@@ -25,15 +25,23 @@ exports.list = async (req, res, next) => {
     const { rows } = await db.query(`
       SELECT
         ef.id, ef.numero_serie, ef.imobilizado, ef.status, ef.observacoes,
-        ef.created_at, ef.updated_at,
+        ef.alocacao_filial, ef.created_at, ef.updated_at,
         ic.id   AS item_catalogo_id,
         ic.nome AS modelo,
         ic.categoria,
         end_f.id     AS endereco_id,
-        end_f.codigo AS endereco_codigo
+        end_f.codigo AS endereco_codigo,
+        cx.id        AS caixa_id,
+        cx.codigo    AS caixa_codigo,
+        p.id         AS pallet_id,
+        p.codigo     AS pallet_codigo,
+        end_p.codigo AS pallet_endereco_codigo
       FROM equipamento_fisico ef
       JOIN item_catalogo ic ON ic.id = ef.item_catalogo_id
       LEFT JOIN endereco_fisico end_f ON end_f.id = ef.endereco_id
+      LEFT JOIN caixa cx              ON cx.id    = ef.caixa_id
+      LEFT JOIN pallet p              ON p.id     = cx.pallet_id
+      LEFT JOIN endereco_fisico end_p ON end_p.id = p.endereco_id
       ${where}
       ORDER BY ef.updated_at DESC
     `, params);
@@ -50,10 +58,18 @@ exports.getById = async (req, res, next) => {
       SELECT
         ef.*, ic.nome AS modelo, ic.categoria,
         ic.estoque_minimo, ic.estoque_maximo,
-        end_f.codigo AS endereco_codigo
+        end_f.codigo AS endereco_codigo,
+        cx.id        AS caixa_id,
+        cx.codigo    AS caixa_codigo,
+        p.id         AS pallet_id,
+        p.codigo     AS pallet_codigo,
+        end_p.codigo AS pallet_endereco_codigo
       FROM equipamento_fisico ef
       JOIN item_catalogo ic ON ic.id = ef.item_catalogo_id
       LEFT JOIN endereco_fisico end_f ON end_f.id = ef.endereco_id
+      LEFT JOIN caixa cx              ON cx.id    = ef.caixa_id
+      LEFT JOIN pallet p              ON p.id     = cx.pallet_id
+      LEFT JOIN endereco_fisico end_p ON end_p.id = p.endereco_id
       WHERE ef.id = $1
     `, [id]);
 
