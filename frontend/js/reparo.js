@@ -366,8 +366,7 @@ const Reparo = (() => {
             <label for="fin-destino">Destino do Equipamento *</label>
             <select id="fin-destino" class="input-select">
               <option value="reposicao">Reposição (consertado — volta ao estoque disponível)</option>
-              <option value="pre_venda">Pré-Venda (sem conserto — encaminhar para venda/sucata)</option>
-              <option value="venda">Venda / Sucata (baixa imediata — sai do WMS)</option>
+              <option value="pre_venda">Ag. Venda (sem conserto — aguarda destinação para venda/sucata)</option>
             </select>
             <p style="margin-top:6px;font-size:12px;color:var(--c-text-muted)" id="fin-destino-hint">
               O equipamento voltará ao estoque disponível para reposição.
@@ -388,8 +387,7 @@ const Reparo = (() => {
       document.getElementById('fin-destino')?.addEventListener('change', (e) => {
         const hints = {
           reposicao: 'O equipamento voltará ao estoque disponível para reposição.',
-          pre_venda: 'O equipamento irá para a Prateleira de Pré-Venda aguardando destinação.',
-          venda:     'O equipamento será baixado e removido do WMS (operação irreversível).',
+          pre_venda: 'O equipamento irá para Ag. Venda aguardando destinação final (venda ou sucata).',
         };
         document.getElementById('fin-destino-hint').textContent = hints[e.target.value] || '';
       });

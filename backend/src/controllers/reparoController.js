@@ -194,6 +194,11 @@ exports.finalizar = async (req, res, next) => {
     const { observacoes_finais, diagnostico, status_destino = 'reposicao', endereco_destino_id, caixa_destino_id } = req.body || {};
     const enderecoDestino = endereco_destino_id || caixa_destino_id;
 
+    const destinosValidos = ['reposicao', 'pre_venda'];
+    if (!destinosValidos.includes(status_destino)) {
+      const e = new Error(`Destino inválido. Ao finalizar reparo use: ${destinosValidos.join(', ')}.`); e.status = 400; throw e;
+    }
+
     const rep = await client.query(`
       SELECT r.*, ef.endereco_id AS equip_endereco_id
       FROM reparo r
