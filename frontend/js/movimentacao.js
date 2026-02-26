@@ -219,13 +219,25 @@ const Movimentacao = (() => {
         <td style="font-size:12px;color:var(--c-text-secondary)">${escapeHtml(montarLocalizacao(r))}</td>
         <td>
           <div class="action-group">
-            <button class="btn btn-sm btn-outline" onclick="App.navegar('saida')" title="Movimentar">
+            <button class="btn btn-sm btn-outline" onclick="Movimentacao.abrirSaida('${escapeHtml(r.numero_serie)}')" title="Movimentar">
               Movimentar
             </button>
           </div>
         </td>
       </tr>
     `).join('');
+  }
+
+  async function abrirSaida(numeroSerie) {
+    App.navegar('saida');
+    // Aguarda o DOM da seção estar visível antes de preencher
+    setTimeout(async () => {
+      const input = document.getElementById('saida-serie');
+      if (input) {
+        input.value = numeroSerie;
+        await buscarEquipamentoSaida();
+      }
+    }, 50);
   }
 
   function filtrarEquipamentos(termo) {
@@ -250,5 +262,6 @@ const Movimentacao = (() => {
     inicializarFormEntrada,
     limparFormEntrada, buscarEquipamentoSaida,
     carregarEquipamentos, filtrarEquipamentos,
+    abrirSaida,
   };
 })();
