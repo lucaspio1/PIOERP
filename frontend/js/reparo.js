@@ -365,12 +365,17 @@ const Reparo = (() => {
           <div class="form-group">
             <label for="fin-destino">Destino do Equipamento *</label>
             <select id="fin-destino" class="input-select">
-              <option value="reposicao">Reposição (consertado — volta ao estoque disponível)</option>
+              <option value="reposicao">Reposição (consertado — aguarda validação do administrador)</option>
               <option value="pre_venda">Ag. Venda (sem conserto — aguarda destinação para venda/sucata)</option>
             </select>
             <p style="margin-top:6px;font-size:12px;color:var(--c-text-muted)" id="fin-destino-hint">
-              O equipamento voltará ao estoque disponível para reposição.
+              O equipamento irá para Ag. Internalização. O administrador confirmará e alocará no WMS.
             </p>
+          </div>
+          <div class="form-group" id="fin-filial-group">
+            <label for="fin-filial">Filial Sistêmica (Alocação Atual) *</label>
+            <input type="text" id="fin-filial" class="input-text" placeholder="Ex: 001, 0324..." />
+            <p style="margin-top:4px;font-size:12px;color:var(--c-text-muted)">Informe a filial onde o equipamento está alocado atualmente no sistema.</p>
           </div>
         </div>
       `,
@@ -386,10 +391,13 @@ const Reparo = (() => {
     setTimeout(() => {
       document.getElementById('fin-destino')?.addEventListener('change', (e) => {
         const hints = {
-          reposicao: 'O equipamento voltará ao estoque disponível para reposição.',
+          reposicao: 'O equipamento irá para Ag. Internalização. O administrador confirmará e alocará no WMS.',
           pre_venda: 'O equipamento irá para Ag. Venda aguardando destinação final (venda ou sucata).',
         };
         document.getElementById('fin-destino-hint').textContent = hints[e.target.value] || '';
+        // Mostrar/ocultar campo de filial
+        document.getElementById('fin-filial-group').style.display =
+          e.target.value === 'reposicao' ? 'block' : 'none';
       });
     }, 100);
   }
@@ -398,8 +406,13 @@ const Reparo = (() => {
     const diagnostico        = document.getElementById('fin-diagnostico')?.value.trim();
     const observacoes_finais = document.getElementById('fin-obs')?.value.trim();
     const status_destino     = document.getElementById('fin-destino')?.value || 'reposicao';
+    const alocacao_filial    = document.getElementById('fin-filial')?.value.trim();
 
     if (!diagnostico) { Toast.warning('Preencha o diagnóstico final.'); return; }
+    if (status_destino === 'reposicao' && !alocacao_filial) {
+      Toast.warning('Informe a Filial Sistêmica de alocação atual.');
+      return;
+    }
 
     _pararTimer();
     Modal.fechar();
@@ -407,6 +420,7 @@ const Reparo = (() => {
     try {
       const res = await Api.reparo.finalizar(_reparoSelecionadoId, {
         diagnostico, observacoes_finais, status_destino,
+        alocacao_filial: status_destino === 'reposicao' ? alocacao_filial : undefined,
       });
       Toast.success('Reparo finalizado!', res.message);
       document.getElementById('timer-display').style.color = 'var(--c-success)';

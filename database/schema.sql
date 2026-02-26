@@ -6,7 +6,7 @@
 -- -----------------------------------------------------------------------------
 -- TIPOS ENUM
 -- -----------------------------------------------------------------------------
-CREATE TYPE status_equip AS ENUM ('reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda');
+CREATE TYPE status_equip AS ENUM ('reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda', 'ag_internalizacao');
 
 CREATE TYPE tipo_movim AS ENUM (
     'entrada_compra',
@@ -66,6 +66,38 @@ COMMENT ON TABLE endereco_fisico IS 'Endereços físicos WMS no formato PP01.S{s
 
 
 -- =============================================================================
+-- TABELA: pallet
+-- Pallet físico dentro de um endereço WMS (porta-pallet).
+-- =============================================================================
+CREATE TABLE pallet (
+    id          UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo      VARCHAR(80)     NOT NULL UNIQUE,
+    endereco_id INTEGER         NOT NULL REFERENCES endereco_fisico (id) ON DELETE RESTRICT,
+    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_pallet_endereco_id ON pallet (endereco_id);
+
+COMMENT ON TABLE pallet IS 'Pallets físicos dentro de um endereço WMS (porta-pallet).';
+
+
+-- =============================================================================
+-- TABELA: caixa
+-- Caixa física dentro de um pallet. Unidade mínima de armazenagem WMS.
+-- =============================================================================
+CREATE TABLE caixa (
+    id          UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo      VARCHAR(80)     NOT NULL UNIQUE,
+    pallet_id   UUID            NOT NULL REFERENCES pallet (id) ON DELETE RESTRICT,
+    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_caixa_pallet_id ON caixa (pallet_id);
+
+COMMENT ON TABLE caixa IS 'Caixas físicas dentro de um pallet. Unidade mínima de armazenagem WMS.';
+
+
+-- =============================================================================
 -- TABELA: equipamento_fisico
 -- A peça real, rastreada por número de série e patrimônio (imobilizado).
 -- =============================================================================
@@ -78,6 +110,9 @@ CREATE TABLE equipamento_fisico (
     status              status_equip    NOT NULL DEFAULT 'reposicao',
     endereco_id         INTEGER
                         REFERENCES endereco_fisico (id) ON DELETE RESTRICT,
+    caixa_id            UUID
+                        REFERENCES caixa (id) ON DELETE RESTRICT,
+    alocacao_filial     VARCHAR(100),
     observacoes         TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
@@ -86,9 +121,12 @@ CREATE TABLE equipamento_fisico (
 CREATE INDEX idx_equip_catalogo_id  ON equipamento_fisico (item_catalogo_id);
 CREATE INDEX idx_equip_status       ON equipamento_fisico (status);
 CREATE INDEX idx_equip_endereco_id  ON equipamento_fisico (endereco_id);
+CREATE INDEX idx_equip_caixa_id     ON equipamento_fisico (caixa_id);
 
-COMMENT ON TABLE  equipamento_fisico             IS 'Instâncias físicas de equipamentos (peças reais com n° de série).';
-COMMENT ON COLUMN equipamento_fisico.endereco_id IS 'FK para endereco_fisico. NULL quando o equipamento está fora do WMS (em uso ou vendido).';
+COMMENT ON TABLE  equipamento_fisico                  IS 'Instâncias físicas de equipamentos (peças reais com n° de série).';
+COMMENT ON COLUMN equipamento_fisico.endereco_id      IS 'FK para endereco_fisico. Usado para RECV e triagem.';
+COMMENT ON COLUMN equipamento_fisico.caixa_id         IS 'FK para caixa WMS. Preenchido após aprovação da internalização.';
+COMMENT ON COLUMN equipamento_fisico.alocacao_filial  IS 'Filial sistêmica. Preenchida pelo técnico; alterada para 324 na aprovação.';
 
 
 -- =============================================================================

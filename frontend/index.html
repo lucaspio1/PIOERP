@@ -87,6 +87,11 @@
           Central de Reparo
           <span class="nav-badge" id="badge-reparo" style="display:none">0</span>
         </a>
+        <a href="#" class="nav-item" data-section="internalizacao">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          Internalização
+          <span class="nav-badge nav-badge-danger" id="badge-internalizacao" style="display:none">0</span>
+        </a>
       </div>
     </nav>
 
@@ -282,7 +287,8 @@
             <option value="ag_triagem">Ag. Triagem</option>
             <option value="em_uso">Em Uso</option>
             <option value="pre_triagem">Pré-Triagem</option>
-            <option value="pre_venda">Pré-Venda</option>
+            <option value="pre_venda">Ag. Venda</option>
+            <option value="ag_internalizacao">Ag. Internalização</option>
             <option value="venda">Venda</option>
           </select>
           <input type="search" id="search-equip" class="input-search" placeholder="Buscar por nº série ou patrimônio..." />
@@ -778,6 +784,50 @@
       </div>
     </section>
 
+    <!-- ─────────────────────────────────────────────────
+         SECTION: INTERNALIZAÇÃO
+    ───────────────────────────────────────────────── -->
+    <section id="section-internalizacao" class="page-section">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <span style="font-size:13px;color:var(--c-text-muted)">
+            Equipamentos reparados aguardando validação e alocação física no WMS.
+          </span>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-sm btn-outline" onclick="Internalizacao.carregar()">Atualizar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Aguardando Internalização</h3>
+          <p class="card-subtitle">
+            Equipamentos finalizados pelo técnico como "bom para uso". O administrador valida e aloca no WMS.
+          </p>
+        </div>
+        <div class="card-body p0">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Modelo</th>
+                  <th>Nº Série</th>
+                  <th>Patrimônio</th>
+                  <th>Filial Atual</th>
+                  <th>Finalizado em</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-internalizacao">
+                <tr><td colspan="6" class="empty-row">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </div><!-- /#main -->
 </div><!-- /#app -->
 
@@ -811,6 +861,7 @@
 <script src="js/recebimento.js"></script>
 <script src="js/solicitacoes.js"></script>
 <script src="js/reparo.js"></script>
+<script src="js/internalizacao.js"></script>
 
 </body>
 </html>

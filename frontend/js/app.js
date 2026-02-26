@@ -115,12 +115,13 @@ function formatTimer(totalSeconds) {
 /** Badge de status de equipamento */
 function badgeStatus(status) {
   const labels = {
-    reposicao:   'Reposição',
-    ag_triagem:  'Ag. Triagem',
-    venda:       'Venda',
-    em_uso:      'Em Uso',
-    pre_triagem: 'Pré-Triagem',
-    pre_venda:   'Pré-Venda',
+    reposicao:         'Reposição',
+    ag_triagem:        'Ag. Triagem',
+    venda:             'Venda',
+    em_uso:            'Em Uso',
+    pre_triagem:       'Pré-Triagem',
+    pre_venda:         'Ag. Venda',
+    ag_internalizacao: 'Ag. Internalização',
   };
   return `<span class="badge status-${status}">${labels[status] || status}</span>`;
 }
@@ -150,7 +151,10 @@ function badgeStatusReparo(status) {
 
 /** Retorna o endereço WMS do equipamento */
 function montarLocalizacao(row) {
-  return row.endereco_codigo || row.caixa_codigo || '—';
+  if (row.caixa_codigo) {
+    return `${row.pallet_endereco_codigo || '?'} › ${row.pallet_codigo || '?'} › ${row.caixa_codigo}`;
+  }
+  return row.endereco_codigo || '—';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -166,7 +170,8 @@ const App = (() => {
     'saida':        { title: 'Saída / Movimentação',      onEnter: () => {} },
     'recebimento':  { title: 'Recebimento',               onEnter: () => Recebimento.carregar() },
     'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => Solicitacoes.carregar() },
-    'reparo':       { title: 'Central de Reparo',         onEnter: () => Reparo.carregar() },
+    'reparo':          { title: 'Central de Reparo',          onEnter: () => Reparo.carregar() },
+    'internalizacao':  { title: 'Internalização',             onEnter: () => Internalizacao.carregar() },
   };
 
   let currentSection = 'dashboard';
