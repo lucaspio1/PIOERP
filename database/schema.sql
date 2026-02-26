@@ -416,23 +416,4 @@ INSERT INTO endereco_fisico (codigo, descricao, nivel, parent_id) VALUES
     ('PP-03-A', 'Sessão A — PP-03', 'sessao', 3),
     ('PP-03-B', 'Sessão B — PP-03', 'sessao', 3);
 
--- Nível 3: Pallets
-INSERT INTO endereco_fisico (codigo, descricao, nivel, parent_id) VALUES
-    ('PP-01-A-P01', 'Pallet 01 — PP-01/Sessão A', 'pallet', 4),
-    ('PP-01-A-P02', 'Pallet 02 — PP-01/Sessão A', 'pallet', 4),
-    ('PP-01-B-P01', 'Pallet 01 — PP-01/Sessão B', 'pallet', 5),
-    ('PP-02-A-P01', 'Pallet 01 — PP-02/Sessão A', 'pallet', 6),
-    ('PP-03-A-P01', 'Pallet 01 — PP-03/Sessão A', 'pallet', 7),
-    ('PP-03-B-P01', 'Pallet 01 — PP-03/Sessão B', 'pallet', 8);
-
--- Nível 4: Caixas
-INSERT INTO endereco_fisico (codigo, descricao, nivel, parent_id) VALUES
-    ('PP-01-A-P01-CX01', 'Caixa 01 — PP01/A/P01', 'caixa', 9),
-    ('PP-01-A-P01-CX02', 'Caixa 02 — PP01/A/P01', 'caixa', 9),
-    ('PP-01-A-P02-CX01', 'Caixa 01 — PP01/A/P02', 'caixa', 10),
-    ('PP-01-B-P01-CX01', 'Caixa 01 — PP01/B/P01', 'caixa', 11),
-    ('PP-01-B-P01-CX02', 'Caixa 02 — PP01/B/P01', 'caixa', 11),
-    ('PP-02-A-P01-CX01', 'Caixa 01 — PP02/A/P01', 'caixa', 12),
-    ('PP-02-A-P01-CX02', 'Caixa 02 — PP02/A/P01', 'caixa', 12),
-    ('PP-03-A-P01-CX01', 'Caixa 01 — PP03/A/P01', 'caixa', 13),
-    ('PP-03-B-P01-CX01', 'Caixa 01 — PP03/B/P01', 'caixa', 14);
+-- Níveis 3 (Pallet) e 4 (Caixa) são cadastrados pelo operador em tempo de uso.
