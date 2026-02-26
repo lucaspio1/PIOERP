@@ -1,6 +1,7 @@
 /**
  * PIOERP — Módulo Mapa WMS V2
- * Gerencia a renderização do Porta-Pallet (Lados Colados) e o drill-down em Modal Centralizado.
+ * Gerencia a renderização do Porta-Pallet consumindo DADOS REAIS da API.
+ * Estrutura: Lados colados, Modal centralizado e status de ocupação (Verde, Amarelo, Vermelho).
  */
 const WmsMapa = (() => {
   const RACK_PREFIX = 'PP01';
@@ -9,22 +10,74 @@ const WmsMapa = (() => {
   
   let gridEl;
 
-  function init() {
+  async function init() {
     gridEl = document.getElementById('rack-grid');
     if (!gridEl) return;
 
-    // Em produção, isso seria um `await Api.endereco.mapaOcupacao()`
-    const ocupacaoMock = simularOcupacaoNoLoad();
-    renderizarGrid(ocupacaoMock);
+    // Coloca um spinner de carregamento na grid enquanto busca os dados
+    gridEl.innerHTML = `
+      <div style="padding: 40px; width: 100%; text-align: center;">
+        <div class="spinner"></div>
+        <p style="color: var(--c-text-muted); margin-top: 10px;">Calculando ocupação real do WMS...</p>
+      </div>
+    `;
+
+    try {
+      // Busca tudo de uma vez (em paralelo) para não sobrecarregar a API com loops de requisição
+      const [resEnderecos, resPallets, resCaixas] = await Promise.all([
+        Api.endereco.listar(),
+        Api.pallets.listar(), 
+        Api.caixas.listar()   
+      ]);
+
+      const mapaOcupacaoReal = calcularOcupacao(resEnderecos.data, resPallets.data, resCaixas.data);
+      renderizarGrid(mapaOcupacaoReal);
+      
+    } catch (error) {
+      gridEl.innerHTML = `<p style="color:var(--c-danger); padding:20px;">Erro ao carregar os dados reais: ${error.message}</p>`;
+    }
   }
 
-  // Define as regras de cores baseadas na quantidade de caixas
+  // Função que cruza as tabelas em memória para descobrir quantas caixas existem em cada endereço
+  function calcularOcupacao(enderecos, pallets, caixas) {
+    const ocupacao = {};
+    
+    // 1. Mapear ID do Endereço -> Código do Endereço (ex: PP01.S1.N3.0)
+    const endIdParaCodigo = {};
+    (enderecos || []).forEach(e => {
+      endIdParaCodigo[e.id] = e.codigo;
+      ocupacao[e.codigo] = 0; // Inicializa todos com 0
+    });
+
+    // 2. Mapear ID do Pallet -> Código do Endereço onde ele está fisicamente
+    const palletParaEndereco = {};
+    (pallets || []).forEach(p => {
+      if (p.endereco_id) {
+        palletParaEndereco[p.id] = endIdParaCodigo[p.endereco_id];
+      }
+    });
+
+    // 3. Contar as caixas
+    (caixas || []).forEach(c => {
+      if (c.pallet_id) {
+        const codigoEndereco = palletParaEndereco[c.pallet_id];
+        if (codigoEndereco !== undefined) {
+          ocupacao[codigoEndereco] += 1; // Soma +1 caixa neste endereço específico
+        }
+      }
+    });
+
+    return ocupacao;
+  }
+
+  // Define as regras de cores baseadas na quantidade de caixas (Verde para vazio)
   function obterClasseStatus(qtdCaixas) {
-    if (!qtdCaixas || qtdCaixas === 0) return 'cell-vazio'; // 0 Caixas
-    if (qtdCaixas >= 1 && qtdCaixas <= 11) return 'cell-parcial'; // 1 a 11 Caixas
-    return 'cell-cheio'; // 12+ Caixas
+    if (!qtdCaixas || qtdCaixas === 0) return 'cell-vazio'; // Verde
+    if (qtdCaixas >= 1 && qtdCaixas <= 11) return 'cell-parcial'; // Amarelo
+    return 'cell-cheio'; // Vermelho
   }
 
+  // Renderiza a estrutura visual da grid do Porta-Pallet
   function renderizarGrid(mapaOcupacao) {
     gridEl.innerHTML = '';
     
@@ -35,7 +88,7 @@ const WmsMapa = (() => {
       const sessionBox = document.createElement('div');
       sessionBox.className = 'rack-session';
 
-      // Dois lados por sessão (0 e 1) colados
+      // Dois lados por sessão (0 e 1) apresentados de forma colada
       [0, 1].forEach(lado => {
         const col = document.createElement('div');
         col.className = 'rack-column';
@@ -48,6 +101,8 @@ const WmsMapa = (() => {
         // Níveis do 7 (topo) ao 1 (base)
         for (let n = TOTAL_NIVEIS; n >= 1; n--) {
           const enderecoCodigo = `${RACK_PREFIX}.S${s}.N${n}.${lado}`;
+          
+          // Obtém a quantidade REAL calculada a partir do cruzamento de dados
           const qtdCaixas = mapaOcupacao[enderecoCodigo] || 0;
 
           const cell = document.createElement('div');
@@ -72,7 +127,9 @@ const WmsMapa = (() => {
     }
   }
 
-  // --- NAVEGAÇÃO / DRILL-DOWN EM MODAL --- //
+  // =========================================================
+  // NAVEGAÇÃO / DRILL-DOWN EM MODAL
+  // =========================================================
 
   function iniciarDrillDown(codigoEnderecoLado) {
     // 1. Abre o Modal Nativo do Sistema
@@ -89,21 +146,21 @@ const WmsMapa = (() => {
       `
     });
 
-    // 2. Timeout curto para o DOM do modal renderizar as divs injetadas acima
+    // 2. Pequeno timeout para garantir que o DOM do modal foi renderizado na tela
     setTimeout(async () => {
       try {
         const contentEl = document.getElementById('wms-modal-content');
         
-        // Precisamos do ID físico do banco para buscar pallets. Buscamos pelo código clicado.
+        // Precisamos do ID físico no banco de dados para buscar os pallets atrelados
         const resEnderecos = await Api.endereco.listar();
         const ladoObj = resEnderecos.data.find(e => e.codigo === codigoEnderecoLado);
 
         if (!ladoObj) {
-          contentEl.innerHTML = `<p style="color:var(--c-danger)">Endereço físico <strong>${codigoEnderecoLado}</strong> ainda não foi criado no banco de dados.</p>`;
+          contentEl.innerHTML = `<p style="color:var(--c-danger)">O endereço físico <strong>${codigoEnderecoLado}</strong> ainda não foi criado na base de dados.</p>`;
           return;
         }
 
-        // Pula a etapa de escolher lados e vai direto buscar os pallets!
+        // Vai direto para a listagem de Pallets (ignora a etapa intermediária de escolher o lado)
         carregarPallets(ladoObj);
       } catch (error) {
         document.getElementById('wms-modal-content').innerHTML = `<p style="color:var(--c-danger)">Erro de conexão: ${error.message}</p>`;
@@ -113,7 +170,7 @@ const WmsMapa = (() => {
 
   async function carregarPallets(ladoObj) {
     const contentEl = document.getElementById('wms-modal-content');
-    contentEl.innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>Buscando pallets...</p></div>';
+    contentEl.innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>A procurar pallets...</p></div>';
     
     atualizarBreadcrumb([ { nome: 'Pallets no Lado' } ]);
 
@@ -144,7 +201,7 @@ const WmsMapa = (() => {
 
   async function carregarCaixas(ladoObj, pallet) {
     const contentEl = document.getElementById('wms-modal-content');
-    contentEl.innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>Buscando caixas...</p></div>';
+    contentEl.innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>A procurar caixas...</p></div>';
     
     atualizarBreadcrumb([
       { nome: 'Pallets', acao: () => carregarPallets(ladoObj) },
@@ -157,7 +214,7 @@ const WmsMapa = (() => {
       contentEl.innerHTML = '';
 
       if (caixas.length === 0) {
-        contentEl.innerHTML = '<p style="color:var(--c-text-muted)">Pallet vazio (nenhuma caixa).</p>';
+        contentEl.innerHTML = '<p style="color:var(--c-text-muted)">Pallet vazio (nenhuma caixa registada).</p>';
         return;
       }
 
@@ -178,7 +235,7 @@ const WmsMapa = (() => {
 
   async function carregarEquipamentos(ladoObj, pallet, caixa) {
     const contentEl = document.getElementById('wms-modal-content');
-    contentEl.innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>Buscando equipamentos...</p></div>';
+    contentEl.innerHTML = '<div style="text-align:center"><div class="spinner"></div><p>A procurar equipamentos...</p></div>';
     
     atualizarBreadcrumb([
       { nome: 'Pallets', acao: () => carregarPallets(ladoObj) },
@@ -192,16 +249,17 @@ const WmsMapa = (() => {
       contentEl.innerHTML = '';
 
       if (equipamentos.length === 0) {
-        contentEl.innerHTML = '<p style="color:var(--c-text-muted)">Caixa vazia.</p>';
+        contentEl.innerHTML = '<p style="color:var(--c-text-muted)">A caixa está vazia.</p>';
         return;
       }
 
       equipamentos.forEach(eq => {
         const div = document.createElement('div');
         div.className = 'wms-equipment-card';
+        // Utiliza o utilitário badgeStatus nativo da SPA
         div.innerHTML = `
           <div style="margin-bottom:4px"><strong>S/N:</strong> ${eq.numero_serie}</div>
-          <div><strong>Patrimônio:</strong> ${eq.imobilizado || 'N/A'} <span style="float:right">${badgeStatus(eq.status)}</span></div>
+          <div><strong>Património:</strong> ${eq.imobilizado || 'N/A'} <span style="float:right">${badgeStatus(eq.status)}</span></div>
         `;
         contentEl.appendChild(div);
       });
@@ -210,6 +268,7 @@ const WmsMapa = (() => {
     }
   }
 
+  // Constrói e atualiza o histórico de navegação (breadcrumb)
   function atualizarBreadcrumb(passos) {
     const breadcrumbEl = document.getElementById('wms-breadcrumb');
     if (!breadcrumbEl) return;
@@ -224,25 +283,13 @@ const WmsMapa = (() => {
       }
       breadcrumbEl.appendChild(span);
       
+      // Adiciona o separador se não for o último item
       if (i < passos.length - 1) {
         const sep = document.createElement('span');
         sep.innerText = ' > ';
         breadcrumbEl.appendChild(sep);
       }
     });
-  }
-
-  // --- Função Mock para Testar as Cores ---
-  function simularOcupacaoNoLoad() {
-    const map = {};
-    for(let s=1; s<=TOTAL_SESSOES; s++) {
-      for(let l=1; l<=TOTAL_NIVEIS; l++) {
-        // Gera números aleatórios de 0 a 16 caixas para testar os 3 status
-        map[`${RACK_PREFIX}.S${s}.N${l}.0`] = Math.floor(Math.random() * 16); 
-        map[`${RACK_PREFIX}.S${s}.N${l}.1`] = Math.floor(Math.random() * 16);
-      }
-    }
-    return map;
   }
 
   return { init };
