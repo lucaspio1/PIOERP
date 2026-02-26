@@ -13,7 +13,6 @@ const Movimentacao = (() => {
   // ════════════════════════════════════════════════════════
 
   async function inicializarFormEntrada() {
-    // Carrega catálogos e endereços em paralelo
     try {
       const [catRes, endRes] = await Promise.all([
         Api.catalogo.listar(),
@@ -30,16 +29,12 @@ const Movimentacao = (() => {
           .map(c => `<option value="${c.id}">${escapeHtml(c.nome)} — ${escapeHtml(c.categoria)}</option>`)
           .join('');
 
-      // Popular dropdown de Porta-Pallets (nível 1)
-      const pps = _todosEnderecos.filter(e => e.nivel === 'porta_pallet' && e.ativo);
-      const selPP = document.getElementById('entrada-pp');
-      selPP.innerHTML = '<option value="">Selecione...</option>' +
-        pps.map(pp => `<option value="${pp.id}">${escapeHtml(pp.codigo)} — ${escapeHtml(pp.descricao || '')}</option>`).join('');
-
-      // Reset dos demais selects
-      _resetSelect('entrada-sessao', 'Selecione um PP primeiro...');
-      _resetSelect('entrada-pallet', 'Selecione uma Sessão primeiro...');
-      _resetSelect('entrada-caixa',  'Selecione um Pallet primeiro...');
+      // Popular dropdown de endereços (plano)
+      const endAtivos = _todosEnderecos.filter(e => e.ativo && !e.codigo.startsWith('RECV-'));
+      const selEnd = document.getElementById('entrada-endereco');
+      selEnd.innerHTML = '<option value="">Selecione o endereço...</option>' +
+        endAtivos.map(e => `<option value="${e.id}">${escapeHtml(e.codigo)}</option>`).join('');
+      selEnd.disabled = false;
 
     } catch (err) {
       Toast.error('Erro ao inicializar formulário de entrada', err.message);
@@ -53,63 +48,18 @@ const Movimentacao = (() => {
     };
   }
 
-  function filtrarSessoes() {
-    const ppId = parseInt(document.getElementById('entrada-pp').value, 10);
-    const sessoes = _todosEnderecos.filter(e => e.nivel === 'sessao' && e.parent_id === ppId && e.ativo);
-
-    const sel = document.getElementById('entrada-sessao');
-    if (!ppId || !sessoes.length) {
-      _resetSelect('entrada-sessao', ppId ? 'Nenhuma sessão disponível' : 'Selecione um PP primeiro...');
-    } else {
-      sel.innerHTML = '<option value="">Selecione...</option>' +
-        sessoes.map(s => `<option value="${s.id}">${escapeHtml(s.codigo)}</option>`).join('');
-      sel.disabled = false;
-    }
-    _resetSelect('entrada-pallet', 'Selecione uma Sessão primeiro...');
-    _resetSelect('entrada-caixa',  'Selecione um Pallet primeiro...');
-  }
-
-  function filtrarPallets() {
-    const sessaoId = parseInt(document.getElementById('entrada-sessao').value, 10);
-    const pallets  = _todosEnderecos.filter(e => e.nivel === 'pallet' && e.parent_id === sessaoId && e.ativo);
-
-    const sel = document.getElementById('entrada-pallet');
-    if (!sessaoId || !pallets.length) {
-      _resetSelect('entrada-pallet', sessaoId ? 'Nenhum pallet disponível' : 'Selecione uma Sessão primeiro...');
-    } else {
-      sel.innerHTML = '<option value="">Selecione...</option>' +
-        pallets.map(p => `<option value="${p.id}">${escapeHtml(p.codigo)}</option>`).join('');
-      sel.disabled = false;
-    }
-    _resetSelect('entrada-caixa', 'Selecione um Pallet primeiro...');
-  }
-
-  function filtrarCaixas() {
-    const palletId = parseInt(document.getElementById('entrada-pallet').value, 10);
-    const caixas   = _todosEnderecos.filter(e => e.nivel === 'caixa' && e.parent_id === palletId && e.ativo);
-
-    const sel = document.getElementById('entrada-caixa');
-    if (!palletId || !caixas.length) {
-      _resetSelect('entrada-caixa', palletId ? 'Nenhuma caixa disponível' : 'Selecione um Pallet primeiro...');
-    } else {
-      sel.innerHTML = '<option value="">Selecione...</option>' +
-        caixas.map(c => `<option value="${c.id}">${escapeHtml(c.codigo)}</option>`).join('');
-      sel.disabled = false;
-    }
-  }
-
   async function _submitEntrada() {
     const item_catalogo_id = document.getElementById('entrada-catalogo').value;
     const numero_serie     = document.getElementById('entrada-serie').value.trim();
     const imobilizado      = document.getElementById('entrada-imobilizado').value.trim();
     const tipo_entrada     = document.getElementById('entrada-tipo').value;
-    const caixa_id         = document.getElementById('entrada-caixa').value;
+    const endereco_id      = document.getElementById('entrada-endereco').value;
     const observacao       = document.getElementById('entrada-obs').value.trim();
 
-    if (!item_catalogo_id) { Toast.warning('Selecione o modelo (catálogo).');            return; }
-    if (!numero_serie)     { Toast.warning('Informe o Número de Série.');                return; }
-    if (!imobilizado)      { Toast.warning('Informe o Patrimônio (Imobilizado).');       return; }
-    if (!caixa_id)         { Toast.warning('Selecione o endereço de destino (Caixa).'); return; }
+    if (!item_catalogo_id) { Toast.warning('Selecione o modelo (catálogo).');        return; }
+    if (!numero_serie)     { Toast.warning('Informe o Número de Série.');            return; }
+    if (!imobilizado)      { Toast.warning('Informe o Patrimônio (Imobilizado).');   return; }
+    if (!endereco_id)      { Toast.warning('Selecione o endereço de destino.');      return; }
 
     const btn = document.querySelector('#form-entrada [type="submit"]');
     btn.disabled = true;
@@ -119,7 +69,7 @@ const Movimentacao = (() => {
       await Api.equipamento.entrada({
         item_catalogo_id: parseInt(item_catalogo_id, 10),
         numero_serie, imobilizado, tipo_entrada,
-        caixa_id: parseInt(caixa_id, 10),
+        endereco_id: parseInt(endereco_id, 10),
         observacao,
       });
       Toast.success('Equipamento registrado com sucesso!', `Nº Série: ${numero_serie}`);
@@ -134,9 +84,6 @@ const Movimentacao = (() => {
 
   function limparFormEntrada() {
     document.getElementById('form-entrada').reset();
-    _resetSelect('entrada-sessao', 'Selecione um PP primeiro...');
-    _resetSelect('entrada-pallet', 'Selecione uma Sessão primeiro...');
-    _resetSelect('entrada-caixa',  'Selecione um Pallet primeiro...');
   }
 
   // ════════════════════════════════════════════════════════
@@ -268,7 +215,7 @@ const Movimentacao = (() => {
         <td><code>${escapeHtml(r.numero_serie)}</code></td>
         <td><code>${escapeHtml(r.imobilizado)}</code></td>
         <td>${badgeStatus(r.status)}</td>
-        <td><code style="font-size:12px">${escapeHtml(r.caixa_codigo || '—')}</code></td>
+        <td><code style="font-size:12px">${escapeHtml(r.endereco_codigo || r.caixa_codigo || '—')}</code></td>
         <td style="font-size:12px;color:var(--c-text-secondary)">${escapeHtml(montarLocalizacao(r))}</td>
         <td>
           <div class="action-group">

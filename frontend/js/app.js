@@ -148,28 +148,9 @@ function badgeStatusReparo(status) {
   return `<span class="badge status-${status}">${labels[status] || status}</span>`;
 }
 
-/** Badge de nível WMS */
-function badgeNivel(nivel) {
-  const labels = {
-    porta_pallet: 'Porta-Pallet',
-    sessao:       'Sessão',
-    pallet:       'Pallet',
-    caixa:        'Caixa',
-  };
-  const colors = {
-    porta_pallet: 'info',
-    sessao:       'info',
-    pallet:       'gray',
-    caixa:        'success',
-  };
-  return `<span class="badge badge-${colors[nivel] || 'gray'}">${labels[nivel] || nivel}</span>`;
-}
-
-/** Monta string de localização completa */
+/** Retorna o endereço WMS do equipamento */
 function montarLocalizacao(row) {
-  const parts = [row.porta_pallet_codigo, row.sessao_codigo, row.pallet_codigo, row.caixa_codigo]
-    .filter(Boolean);
-  return parts.length ? parts.join(' › ') : '—';
+  return row.endereco_codigo || row.caixa_codigo || '—';
 }
 
 // ═══════════════════════════════════════════════════════

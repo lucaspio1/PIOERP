@@ -108,11 +108,11 @@ const Recebimento = (() => {
     if (!numero_serie)     { Toast.warning('Informe o Número de Série.');     return; }
     if (!imobilizado)      { Toast.warning('Informe o Patrimônio.');          return; }
 
-    // Determina caixa destino conforme prateleira escolhida
-    const caixa_id = destinoInicial === 'pre_venda' ? _caixaPreVendaId : _caixaPreTriagemId;
+    // Determina endereço destino conforme prateleira escolhida
+    const endereco_id = destinoInicial === 'pre_venda' ? _caixaPreVendaId : _caixaPreTriagemId;
 
-    if (!caixa_id) {
-      Toast.error('Configuração incompleta', 'Endereços de recebimento não encontrados. Execute a migration 004.');
+    if (!endereco_id) {
+      Toast.error('Configuração incompleta', 'Endereços de recebimento não encontrados. Execute a migration 005.');
       return;
     }
 
@@ -126,21 +126,17 @@ const Recebimento = (() => {
         numero_serie,
         imobilizado,
         tipo_entrada: 'entrada_recebimento',
-        caixa_id,
+        endereco_id,
         observacao,
       });
 
-      // Sobrescreve o status inicial via saida se for pre_venda
-      // (a entrada_recebimento sempre gera pre_triagem; para pre_venda fazemos
-      //  um segundo passo de movimentação automático)
       if (destinoInicial === 'pre_venda') {
-        // Busca o equipamento recém criado pelo série
         const res = await Api.equipamento.listar('pre_triagem');
         const equip = res.data.find(e => e.numero_serie.toLowerCase() === numero_serie.toLowerCase());
         if (equip) {
           await Api.equipamento.saida(equip.id, {
             status_destino: 'pre_venda',
-            caixa_destino_id: _caixaPreVendaId,
+            endereco_destino_id: _caixaPreVendaId,
             observacao: 'Destinado à Pré-Venda no recebimento.',
           });
         }
@@ -209,15 +205,15 @@ const Recebimento = (() => {
 
   async function _carregarCaixasDestino() {
     try {
-      const res = await Api.endereco.listar('caixa');
+      const res = await Api.endereco.listar();
       _todosCaixas = res.data.filter(e => e.ativo && !['RECV-CX-PRETRIAGEM', 'RECV-CX-PREVENDA'].includes(e.codigo));
 
       const sel = document.getElementById('montar-caixa-destino');
       if (!sel) return;
-      sel.innerHTML = '<option value="">Selecione a caixa...</option>' +
+      sel.innerHTML = '<option value="">Selecione o endereço...</option>' +
         _todosCaixas.map(c => `<option value="${c.id}">${escapeHtml(c.codigo)}${c.descricao ? ' — ' + escapeHtml(c.descricao) : ''}</option>`).join('');
     } catch (err) {
-      Toast.error('Erro ao carregar caixas de destino', err.message);
+      Toast.error('Erro ao carregar endereços de destino', err.message);
     }
   }
 
@@ -241,20 +237,20 @@ const Recebimento = (() => {
       return;
     }
 
-    const status_destino  = document.getElementById('montar-status-destino').value;
-    const caixa_destino_id = parseInt(document.getElementById('montar-caixa-destino').value, 10);
-    const observacao      = document.getElementById('montar-obs').value.trim();
+    const status_destino     = document.getElementById('montar-status-destino').value;
+    const endereco_destino_id = parseInt(document.getElementById('montar-caixa-destino').value, 10);
+    const observacao         = document.getElementById('montar-obs').value.trim();
 
-    if (status_destino === 'ag_triagem' && !caixa_destino_id) {
-      Toast.warning('Selecione uma caixa de destino para Ag. Triagem.');
+    if (status_destino === 'ag_triagem' && !endereco_destino_id) {
+      Toast.warning('Selecione um endereço de destino para Ag. Triagem.');
       return;
     }
 
-    // Para 'venda', caixa_destino_id pode ser null (sai do WMS)
+    // Para 'venda', endereco_destino_id pode ser null (sai do WMS)
     const payload = {
       equipamento_ids,
       status_destino,
-      caixa_destino_id: status_destino === 'venda' ? (caixa_destino_id || null) : caixa_destino_id,
+      endereco_destino_id: status_destino === 'venda' ? (endereco_destino_id || null) : endereco_destino_id,
       observacao,
     };
 

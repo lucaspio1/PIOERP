@@ -6,8 +6,6 @@
 -- -----------------------------------------------------------------------------
 -- TIPOS ENUM
 -- -----------------------------------------------------------------------------
-CREATE TYPE nivel_wms AS ENUM ('porta_pallet', 'sessao', 'pallet', 'caixa');
-
 CREATE TYPE status_equip AS ENUM ('reposicao', 'ag_triagem', 'venda', 'em_uso', 'pre_triagem', 'pre_venda');
 
 CREATE TYPE tipo_movim AS ENUM (
@@ -48,85 +46,25 @@ COMMENT ON COLUMN item_catalogo.estoque_minimo IS 'Limite crítico: alertas são
 
 -- =============================================================================
 -- TABELA: endereco_fisico
--- Hierarquia WMS com parent_id auto-referenciado.
--- Nível 1: porta_pallet → Nível 2: sessao → Nível 3: pallet → Nível 4: caixa
--- O equipamento_fisico é o "Nível 5" e aponta obrigatoriamente para uma caixa.
+-- Endereço plano no formato PP01.S{sessao}.N{nivel}.{lado}
+-- Ex: PP01.S1.N3.0 = Porta-Pallet 01, Sessão 1, Nível 3, Lado 0
 -- =============================================================================
 CREATE TABLE endereco_fisico (
     id          SERIAL          PRIMARY KEY,
     codigo      VARCHAR(80)     NOT NULL UNIQUE,
     descricao   VARCHAR(255),
-    nivel       nivel_wms       NOT NULL,
-    parent_id   INTEGER         REFERENCES endereco_fisico (id) ON DELETE RESTRICT,
     ativo       BOOLEAN         NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_end_parent ON endereco_fisico (parent_id);
-CREATE INDEX idx_end_nivel  ON endereco_fisico (nivel);
+CREATE INDEX idx_end_codigo ON endereco_fisico (codigo);
 
-COMMENT ON TABLE  endereco_fisico          IS 'Endereçamento físico hierárquico (WMS). Profundidade máxima de 4 níveis.';
-COMMENT ON COLUMN endereco_fisico.parent_id IS 'NULL apenas para porta_pallet (nível 1).';
-
--- Trigger: valida a hierarquia de endereços (filho só pode ter pai do nível imediatamente superior)
-CREATE OR REPLACE FUNCTION fn_validar_hierarquia_endereco()
-RETURNS TRIGGER
-LANGUAGE plpgsql AS
-$$
-DECLARE
-    v_nivel_pai nivel_wms;
-BEGIN
-    CASE NEW.nivel
-        WHEN 'porta_pallet' THEN
-            IF NEW.parent_id IS NOT NULL THEN
-                RAISE EXCEPTION
-                    'Porta-Pallet (nível 1) não pode ter endereço pai. Verifique o campo parent_id.';
-            END IF;
-
-        WHEN 'sessao' THEN
-            IF NEW.parent_id IS NULL THEN
-                RAISE EXCEPTION 'Sessão (nível 2) requer um parent_id do tipo porta_pallet.';
-            END IF;
-            SELECT nivel INTO v_nivel_pai FROM endereco_fisico WHERE id = NEW.parent_id;
-            IF v_nivel_pai <> 'porta_pallet' THEN
-                RAISE EXCEPTION
-                    'Sessão deve ser filha de um porta_pallet. Pai informado é do tipo: %', v_nivel_pai;
-            END IF;
-
-        WHEN 'pallet' THEN
-            IF NEW.parent_id IS NULL THEN
-                RAISE EXCEPTION 'Pallet (nível 3) requer um parent_id do tipo sessao.';
-            END IF;
-            SELECT nivel INTO v_nivel_pai FROM endereco_fisico WHERE id = NEW.parent_id;
-            IF v_nivel_pai <> 'sessao' THEN
-                RAISE EXCEPTION
-                    'Pallet deve ser filho de uma sessao. Pai informado é do tipo: %', v_nivel_pai;
-            END IF;
-
-        WHEN 'caixa' THEN
-            IF NEW.parent_id IS NULL THEN
-                RAISE EXCEPTION 'Caixa (nível 4) requer um parent_id do tipo pallet.';
-            END IF;
-            SELECT nivel INTO v_nivel_pai FROM endereco_fisico WHERE id = NEW.parent_id;
-            IF v_nivel_pai <> 'pallet' THEN
-                RAISE EXCEPTION
-                    'Caixa deve ser filha de um pallet. Pai informado é do tipo: %', v_nivel_pai;
-            END IF;
-    END CASE;
-
-    RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trig_validar_endereco
-    BEFORE INSERT OR UPDATE ON endereco_fisico
-    FOR EACH ROW EXECUTE FUNCTION fn_validar_hierarquia_endereco();
+COMMENT ON TABLE endereco_fisico IS 'Endereços físicos WMS no formato PP01.S{sessao}.N{nivel}.{lado}.';
 
 
 -- =============================================================================
 -- TABELA: equipamento_fisico
 -- A peça real, rastreada por número de série e patrimônio (imobilizado).
--- Deve estar obrigatoriamente vinculada a uma "caixa" (nível 4).
 -- =============================================================================
 CREATE TABLE equipamento_fisico (
     id                  SERIAL          PRIMARY KEY,
@@ -135,42 +73,19 @@ CREATE TABLE equipamento_fisico (
     numero_serie        VARCHAR(100)    NOT NULL UNIQUE,
     imobilizado         VARCHAR(100)    NOT NULL UNIQUE,
     status              status_equip    NOT NULL DEFAULT 'reposicao',
-    caixa_id            INTEGER
+    endereco_id         INTEGER
                         REFERENCES endereco_fisico (id) ON DELETE RESTRICT,
     observacoes         TEXT,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_equip_catalogo_id ON equipamento_fisico (item_catalogo_id);
-CREATE INDEX idx_equip_status      ON equipamento_fisico (status);
-CREATE INDEX idx_equip_caixa_id    ON equipamento_fisico (caixa_id);
+CREATE INDEX idx_equip_catalogo_id  ON equipamento_fisico (item_catalogo_id);
+CREATE INDEX idx_equip_status       ON equipamento_fisico (status);
+CREATE INDEX idx_equip_endereco_id  ON equipamento_fisico (endereco_id);
 
-COMMENT ON TABLE  equipamento_fisico          IS 'Instâncias físicas de equipamentos (peças reais com n° de série).';
-COMMENT ON COLUMN equipamento_fisico.caixa_id IS 'FK obrigatória para endereco_fisico do tipo caixa (nível 4).';
-
--- Trigger: garante que caixa_id aponta apenas para endereços do tipo 'caixa'
-CREATE OR REPLACE FUNCTION fn_validar_caixa_equipamento()
-RETURNS TRIGGER
-LANGUAGE plpgsql AS
-$$
-DECLARE
-    v_nivel nivel_wms;
-BEGIN
-    IF NEW.caixa_id IS NOT NULL THEN
-        SELECT nivel INTO v_nivel FROM endereco_fisico WHERE id = NEW.caixa_id;
-        IF v_nivel <> 'caixa' THEN
-            RAISE EXCEPTION
-                'O campo caixa_id deve apontar para um endereço do tipo caixa. Tipo encontrado: %', v_nivel;
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER trig_validar_caixa_equipamento
-    BEFORE INSERT OR UPDATE ON equipamento_fisico
-    FOR EACH ROW EXECUTE FUNCTION fn_validar_caixa_equipamento();
+COMMENT ON TABLE  equipamento_fisico             IS 'Instâncias físicas de equipamentos (peças reais com n° de série).';
+COMMENT ON COLUMN equipamento_fisico.endereco_id IS 'FK para endereco_fisico. NULL quando o equipamento está fora do WMS (em uso ou vendido).';
 
 
 -- =============================================================================
@@ -341,12 +256,9 @@ SELECT
     r.iniciado_em,
     r.created_at                                                AS entrada_triagem_em,
 
-    -- Endereço físico completo (caixa → pallet → sessão → porta-pallet)
-    e4.id                                                       AS caixa_id,
-    e4.codigo                                                   AS caixa_codigo,
-    e3.codigo                                                   AS pallet_codigo,
-    e2.codigo                                                   AS sessao_codigo,
-    e1.codigo                                                   AS porta_pallet_codigo
+    -- Endereço físico plano
+    end_f.id                                                    AS endereco_id,
+    end_f.codigo                                                AS endereco_codigo
 
 FROM equipamento_fisico ef
 
@@ -368,11 +280,8 @@ LEFT JOIN (
     GROUP BY item_catalogo_id
 ) est ON est.item_catalogo_id = ic.id
 
--- Hierarquia de endereço
-LEFT JOIN endereco_fisico e4  ON e4.id  = ef.caixa_id
-LEFT JOIN endereco_fisico e3  ON e3.id  = e4.parent_id
-LEFT JOIN endereco_fisico e2  ON e2.id  = e3.parent_id
-LEFT JOIN endereco_fisico e1  ON e1.id  = e2.parent_id
+-- Endereço físico plano
+LEFT JOIN endereco_fisico end_f ON end_f.id = ef.endereco_id
 
 WHERE ef.status = 'ag_triagem'
 
@@ -402,18 +311,19 @@ INSERT INTO item_catalogo (nome, categoria, estoque_minimo, estoque_maximo) VALU
     ('Webcam Logitech C920 HD Pro',   'Periféricos',  2,  10),
     ('No-Break APC BVX 700',          'Infraestrutura', 1, 5);
 
--- Nível 1: Porta-Pallets
-INSERT INTO endereco_fisico (codigo, descricao, nivel, parent_id) VALUES
-    ('PP-01', 'Porta-Pallet 01 — Corredor A', 'porta_pallet', NULL),
-    ('PP-02', 'Porta-Pallet 02 — Corredor A', 'porta_pallet', NULL),
-    ('PP-03', 'Porta-Pallet 03 — Corredor B', 'porta_pallet', NULL);
+-- Endereços WMS planos: PP01.S{sessao}.N{nivel}.{lado}
+-- 1 PP × 18 Sessões × 7 Níveis × 2 Lados = 252 endereços
+INSERT INTO endereco_fisico (codigo, descricao)
+SELECT
+    'PP01.S' || s || '.N' || n || '.' || l,
+    'PP01 / Sessão ' || s || ' / Nível ' || n || ' / Lado ' || l
+FROM
+    generate_series(1, 18) AS s,
+    generate_series(1, 7)  AS n,
+    generate_series(0, 1)  AS l
+ORDER BY s, n, l;
 
--- Nível 2: Sessões
-INSERT INTO endereco_fisico (codigo, descricao, nivel, parent_id) VALUES
-    ('PP-01-A', 'Sessão A — PP-01', 'sessao', 1),
-    ('PP-01-B', 'Sessão B — PP-01', 'sessao', 1),
-    ('PP-02-A', 'Sessão A — PP-02', 'sessao', 2),
-    ('PP-03-A', 'Sessão A — PP-03', 'sessao', 3),
-    ('PP-03-B', 'Sessão B — PP-03', 'sessao', 3);
-
--- Níveis 3 (Pallet) e 4 (Caixa) são cadastrados pelo operador em tempo de uso.
+-- Endereços fixos de Recebimento (prateleiras de triagem e pré-venda)
+INSERT INTO endereco_fisico (codigo, descricao) VALUES
+    ('RECV-CX-PRETRIAGEM', 'Prateleira de Pré-Triagem'),
+    ('RECV-CX-PREVENDA',   'Prateleira de Pré-Venda');

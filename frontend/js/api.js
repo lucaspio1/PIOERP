@@ -55,8 +55,7 @@ const Api = (() => {
     },
 
     endereco: {
-      listar:    (nivel) => Api.get(`/endereco${nivel ? `?nivel=${nivel}` : ''}`),
-      arvore:    ()      => Api.get('/endereco/tree'),
+      listar:    ()      => Api.get('/endereco'),
       criar:     (data)  => Api.post('/endereco', data),
       atualizar: (id, d) => Api.put(`/endereco/${id}`, d),
     },

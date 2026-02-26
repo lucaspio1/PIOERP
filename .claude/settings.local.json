@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\\\Users\\\\admin\\\\Desktop\\\\PIOERP\\\\.claude\\\\worktrees\\\\optimistic-solomon\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\admin\\\\Desktop\\\\PIOERP\\\\.claude\\\\worktrees\\\\optimistic-solomon\" diff)",
+      "Bash(git -C \"C:\\\\Users\\\\admin\\\\Desktop\\\\PIOERP\\\\.claude\\\\worktrees\\\\optimistic-solomon\" log --oneline -5)",
+      "Bash(git -C \"C:\\\\Users\\\\admin\\\\Desktop\\\\PIOERP\\\\.claude\\\\worktrees\\\\optimistic-solomon\" config user.email \"lucaspio1@users.noreply.github.com\")",
+      "Bash(git -C \"C:\\\\Users\\\\admin\\\\Desktop\\\\PIOERP\\\\.claude\\\\worktrees\\\\optimistic-solomon\" config user.name \"lucaspio1\")",
+      "Bash(git -C:*)",
+      "Bash(gh pr:*)"
+    ]
+  }
+}
