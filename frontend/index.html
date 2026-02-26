@@ -288,12 +288,12 @@
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <h3>Mapa de Ocupação - Porta-Pallet PP01</h3>
-            <p class="card-subtitle">Visão frontal dos níveis e sessões.</p>
+            <p class="card-subtitle">Visão frontal de Sessões (Lado 0 e Lado 1).</p>
           </div>
           <div class="wms-legend">
-            <span class="badge badge-success">Vazio</span>
-            <span class="badge badge-warning">Parcial</span>
-            <span class="badge badge-danger">Lotado</span>
+            <span class="badge badge-gray">Vazio (0 cx)</span>
+            <span class="badge badge-warning">Parcial (1 a 11 cx)</span>
+            <span class="badge badge-danger">Cheio (12+ cx)</span>
           </div>
         </div>
         <div class="card-body">
@@ -877,18 +877,7 @@
   </div>
 </div>
 
-<div id="wms-offcanvas" class="offcanvas">
-  <div class="offcanvas-header">
-    <div>
-      <h3 id="offcanvas-title">Detalhes do Endereço</h3>
-      <div id="wms-breadcrumb" class="breadcrumb"></div>
-    </div>
-    <button id="close-offcanvas" class="icon-btn" title="Fechar">&times;</button>
-  </div>
-  <div class="offcanvas-body" id="offcanvas-content">
-    </div>
-</div>
-<div id="offcanvas-overlay" class="modal-overlay"></div>
+
 
 <!-- ═══════════════════════════════════════════════════════
      TOAST CONTAINER
