@@ -248,7 +248,6 @@ const Movimentacao = (() => {
 
   return {
     inicializarFormEntrada,
-    filtrarSessoes, filtrarPallets, filtrarCaixas,
     limparFormEntrada, buscarEquipamentoSaida,
     carregarEquipamentos, filtrarEquipamentos,
   };
