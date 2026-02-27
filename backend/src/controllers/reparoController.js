@@ -3,9 +3,27 @@
 const db = require('../config/database');
 
 // ── Dashboard de prioridades (query complexa) ────────────────────────────────
+// Agora filtra apenas reparos vinculados a solicitações do técnico,
+// ou reparos que o técnico já iniciou/está em andamento.
 exports.getPrioridades = async (req, res, next) => {
   try {
-    const { rows } = await db.query('SELECT * FROM v_prioridades_reparo');
+    const { todos } = req.query;
+    let query = 'SELECT * FROM v_prioridades_reparo';
+
+    // Por padrão, mostra apenas itens solicitados ativamente pelo técnico
+    // (via solicitacao_pallet) ou que já estão em andamento/pausados.
+    // O parâmetro ?todos=true retorna todos (compatibilidade).
+    if (!todos) {
+      query = `
+        SELECT vp.*
+        FROM v_prioridades_reparo vp
+        JOIN reparo r ON r.id = vp.reparo_id
+        WHERE r.solicitacao_pallet_id IS NOT NULL
+           OR r.status IN ('em_progresso', 'pausado')
+      `;
+    }
+
+    const { rows } = await db.query(query);
     res.json({ success: true, data: rows, total: rows.length });
   } catch (err) { next(err); }
 };
@@ -427,5 +445,106 @@ exports.atualizarSolicitacao = async (req, res, next) => {
     }
 
     res.json({ success: true, data: rows[0], message: `Solicitação marcada como "${status}".` });
+  } catch (err) { next(err); }
+};
+
+// ── BUSCAR EQUIPAMENTO POR BIPAGEM (Nº Série ou Imobilizado) ─────────────────
+// GET /api/reparo/bipagem?q=SERIAL_OU_IMOB
+// Busca equipamento em status ag_triagem pelo número de série ou imobilizado.
+// Retorna o equipamento com seu reparo ativo, se existir.
+exports.buscarBipagem = async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    if (!q?.trim()) {
+      const e = new Error('Informe o Número de Série ou Imobilizado para busca.'); e.status = 400; throw e;
+    }
+
+    const termo = q.trim();
+
+    const { rows } = await db.query(`
+      SELECT
+        ef.id AS equipamento_id, ef.numero_serie, ef.imobilizado, ef.status,
+        ic.nome AS modelo, ic.categoria,
+        r.id AS reparo_id, r.status AS status_reparo,
+        r.descricao_problema, r.total_minutos_trabalhados,
+        end_f.codigo AS endereco_codigo
+      FROM equipamento_fisico ef
+      JOIN item_catalogo ic ON ic.id = ef.item_catalogo_id
+      LEFT JOIN reparo r ON r.equipamento_id = ef.id AND r.status != 'finalizado'
+      LEFT JOIN endereco_fisico end_f ON end_f.id = ef.endereco_id
+      WHERE ef.status = 'ag_triagem'
+        AND (LOWER(ef.numero_serie) = LOWER($1) OR LOWER(ef.imobilizado) = LOWER($1))
+      LIMIT 1
+    `, [termo]);
+
+    if (!rows.length) {
+      const e = new Error(`Nenhum equipamento em Ag. Triagem encontrado para "${termo}".`);
+      e.status = 404; throw e;
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (err) { next(err); }
+};
+
+// ── LISTAR SOLICITAÇÕES ATENDIDAS (para a tela do técnico) ────────────────────
+// GET /api/reparo/solicitacoes-atendidas
+// Retorna solicitações atendidas pelo almoxarife que ainda possuem itens
+// em ag_triagem aguardando triagem pelo técnico.
+exports.listarSolicitacoesAtendidas = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT
+        sp.id, sp.item_catalogo_id, sp.status, sp.observacao,
+        sp.atendida_em, sp.created_at,
+        ic.nome AS modelo, ic.categoria, ic.estoque_minimo,
+        v.qtd_reposicao, v.deficit,
+        COUNT(ef.id) FILTER (WHERE ef.status = 'ag_triagem') AS qtd_aguardando_triagem
+      FROM solicitacao_pallet sp
+      JOIN item_catalogo ic ON ic.id = sp.item_catalogo_id
+      LEFT JOIN v_estoque_por_catalogo v ON v.id = ic.id
+      LEFT JOIN equipamento_fisico ef ON ef.item_catalogo_id = ic.id
+      WHERE sp.status = 'atendida'
+      GROUP BY sp.id, sp.item_catalogo_id, sp.status, sp.observacao,
+               sp.atendida_em, sp.created_at,
+               ic.nome, ic.categoria, ic.estoque_minimo,
+               v.qtd_reposicao, v.deficit
+      HAVING COUNT(ef.id) FILTER (WHERE ef.status = 'ag_triagem') > 0
+      ORDER BY sp.atendida_em DESC
+    `);
+
+    res.json({ success: true, data: rows, total: rows.length });
+  } catch (err) { next(err); }
+};
+
+// ── VINCULAR REPARO A SOLICITAÇÃO (quando técnico bipa um item) ──────────────
+// POST /api/reparo/:id/vincular-solicitacao
+// Vincula um reparo a uma solicitação de pallet, indicando que o técnico
+// ativamente solicitou e está trabalhando neste item.
+exports.vincularSolicitacao = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { solicitacao_pallet_id } = req.body;
+
+    if (!solicitacao_pallet_id) {
+      const e = new Error('"solicitacao_pallet_id" é obrigatório.'); e.status = 400; throw e;
+    }
+
+    // Verifica que o reparo existe
+    const rep = await db.query('SELECT * FROM reparo WHERE id = $1', [id]);
+    if (!rep.rows.length) {
+      const e = new Error('Reparo não encontrado.'); e.status = 404; throw e;
+    }
+
+    // Verifica que a solicitação existe
+    const sol = await db.query('SELECT * FROM solicitacao_pallet WHERE id = $1', [solicitacao_pallet_id]);
+    if (!sol.rows.length) {
+      const e = new Error('Solicitação não encontrada.'); e.status = 404; throw e;
+    }
+
+    const { rows } = await db.query(`
+      UPDATE reparo SET solicitacao_pallet_id = $1 WHERE id = $2 RETURNING *
+    `, [solicitacao_pallet_id, id]);
+
+    res.json({ success: true, data: rows[0], message: 'Reparo vinculado à solicitação.' });
   } catch (err) { next(err); }
 };

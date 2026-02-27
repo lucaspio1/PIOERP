@@ -9,13 +9,13 @@ const Catalogo = (() => {
   // ── Listar ──────────────────────────────────────────────
   async function carregar() {
     const tbody = document.getElementById('tbody-catalogo');
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-row"><span class="spinner"></span></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-row"><span class="spinner"></span></td></tr>`;
     try {
       const res = await Api.catalogo.listar();
       _dados = res.data;
       renderizar(_dados);
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</td></tr>`;
       Toast.error('Erro ao carregar catálogo', err.message);
     }
   }
@@ -23,12 +23,13 @@ const Catalogo = (() => {
   function renderizar(lista) {
     const tbody = document.getElementById('tbody-catalogo');
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-row">Nenhum item no catálogo.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-row">Nenhum item no catálogo.</td></tr>`;
       return;
     }
     tbody.innerHTML = lista.map(r => `
       <tr class="${r.estoque_critico ? 'row-critical' : ''}" data-id="${r.id}">
         <td><span style="color:var(--c-text-muted);font-size:12px">#${r.id}</span></td>
+        <td><code>${escapeHtml(r.codigo || '—')}</code></td>
         <td>
           <strong>${escapeHtml(r.nome)}</strong>
           ${r.estoque_critico ? `<span class="badge badge-danger" style="margin-left:6px">Crítico</span>` : ''}
@@ -64,7 +65,9 @@ const Catalogo = (() => {
   function filtrar(termo) {
     const t = termo.toLowerCase();
     const filtrado = _dados.filter(r =>
-      r.nome.toLowerCase().includes(t) || r.categoria.toLowerCase().includes(t)
+      r.nome.toLowerCase().includes(t) ||
+      r.categoria.toLowerCase().includes(t) ||
+      (r.codigo && r.codigo.toLowerCase().includes(t))
     );
     renderizar(filtrado);
   }
@@ -162,9 +165,15 @@ const Catalogo = (() => {
   function _formHtml(r) {
     return `
       <div class="form-grid-1">
-        <div class="form-group">
-          <label for="cat-nome">Nome / Modelo *</label>
-          <input id="cat-nome" class="input-text" type="text" value="${escapeHtml(r.nome || '')}" placeholder="Ex: Notebook Dell Latitude 5420" required />
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="cat-codigo">Código</label>
+            <input id="cat-codigo" class="input-text" type="text" value="${escapeHtml(r.codigo || '')}" placeholder="Ex: NB-001, MON-003..." />
+          </div>
+          <div class="form-group">
+            <label for="cat-nome">Nome / Modelo *</label>
+            <input id="cat-nome" class="input-text" type="text" value="${escapeHtml(r.nome || '')}" placeholder="Ex: Notebook Dell Latitude 5420" required />
+          </div>
         </div>
         <div class="form-group">
           <label for="cat-categoria">Categoria *</label>
@@ -195,6 +204,7 @@ const Catalogo = (() => {
   }
 
   function _lerForm() {
+    const codigo    = document.getElementById('cat-codigo')?.value.trim() || null;
     const nome      = document.getElementById('cat-nome')?.value.trim();
     const categoria = document.getElementById('cat-categoria')?.value.trim();
     const min       = parseInt(document.getElementById('cat-min')?.value || '0', 10);
@@ -204,7 +214,7 @@ const Catalogo = (() => {
     if (!categoria) { Toast.warning('Informe a categoria.'); return null; }
     if (max < min) { Toast.warning('Estoque máximo não pode ser menor que o mínimo.'); return null; }
 
-    return { nome, categoria, estoque_minimo: min, estoque_maximo: max };
+    return { codigo, nome, categoria, estoque_minimo: min, estoque_maximo: max };
   }
 
   return { carregar, filtrar, abrirModalCriacao, abrirModalEdicao, confirmarRemocao, _submitCriacao, _submitEdicao, _remover };
