@@ -189,3 +189,71 @@ exports.createCaixa = async (req, res, next) => {
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
 };
+
+// ── Gerar próximo código de caixa automático ─────────────────────────────────
+// GET /api/caixas/proximo-codigo
+// Retorna o próximo código sequencial no formato CX-001, CX-002, etc.
+exports.proximoCodigoCaixa = async (_req, res, next) => {
+  try {
+    // Busca o maior número já utilizado no padrão CX-NNN
+    const { rows } = await db.query(`
+      SELECT codigo FROM caixa
+      WHERE codigo ~ '^CX-[0-9]+$'
+      ORDER BY CAST(SUBSTRING(codigo FROM 4) AS INTEGER) DESC
+      LIMIT 1
+    `);
+
+    let proximo = 1;
+    if (rows.length) {
+      const ultimo = parseInt(rows[0].codigo.replace('CX-', ''), 10);
+      proximo = ultimo + 1;
+    }
+
+    const codigo = `CX-${String(proximo).padStart(3, '0')}`;
+    res.json({ success: true, data: { codigo, numero: proximo } });
+  } catch (err) { next(err); }
+};
+
+// ── Criar caixa com código automático (CX-NNN) ─────────────────────────────
+// POST /api/caixas/auto
+// Cria uma caixa com numeração sequencial automática vinculada a um pallet.
+exports.createCaixaAuto = async (req, res, next) => {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { pallet_id } = req.body;
+    if (!pallet_id) { const e = new Error('"pallet_id" é obrigatório.'); e.status = 400; throw e; }
+
+    const pal = await client.query('SELECT id FROM pallet WHERE id = $1', [pallet_id]);
+    if (!pal.rows.length) { const e = new Error('Pallet não encontrado.'); e.status = 404; throw e; }
+
+    // Gera código sequencial baseado no maior existente
+    const { rows: maxRows } = await client.query(`
+      SELECT codigo FROM caixa
+      WHERE codigo ~ '^CX-[0-9]+$'
+      ORDER BY CAST(SUBSTRING(codigo FROM 4) AS INTEGER) DESC
+      LIMIT 1
+      FOR UPDATE
+    `);
+
+    let proximo = 1;
+    if (maxRows.length) {
+      proximo = parseInt(maxRows[0].codigo.replace('CX-', ''), 10) + 1;
+    }
+
+    const codigo = `CX-${String(proximo).padStart(3, '0')}`;
+
+    const { rows } = await client.query(`
+      INSERT INTO caixa (codigo, pallet_id) VALUES ($1, $2) RETURNING *
+    `, [codigo, pallet_id]);
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, data: rows[0], message: `Caixa ${codigo} criada com sucesso.` });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};

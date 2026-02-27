@@ -8,15 +8,19 @@
  * Aba 2 - Montar Pallet / Caixa:
  *   Consolida itens das prateleiras em caixas definitivas do
  *   porta-pallet, alterando status para ag_triagem ou venda.
+ *   O destino é inferido automaticamente pelo filtro superior:
+ *     - Pré-Triagem → ag_triagem (cria reparos)
+ *     - Pré-Venda   → venda (saída do WMS)
+ *   Caixas são criadas dinamicamente com numeração sequencial (CX-001, CX-002...).
  */
 
 const Recebimento = (() => {
   // IDs fixos das caixas de recebimento (preenchidos ao carregar endereços)
   let _caixaPreTriagemId  = null;
   let _caixaPreVendaId    = null;
-  let _todosCaixas        = [];      // Todas as caixas ativas (para select de destino)
   let _itensPrateleira    = [];      // Cache dos itens listados na aba 2
   let _abaAtual           = 'catalogacao';
+  let _pallets            = [];      // Pallets disponíveis para selecionar
 
   // ════════════════════════════════════════════════════════
   // INICIALIZAÇÃO / CARREGAR
@@ -27,7 +31,7 @@ const Recebimento = (() => {
       await Promise.all([
         _inicializarFormCatalogacao(),
         carregarPrateleiras(),
-        _carregarCaixasDestino(),
+        _carregarPallets(),
       ]);
     } catch (err) {
       Toast.error('Erro ao inicializar Recebimento', err.message);
@@ -49,7 +53,10 @@ const Recebimento = (() => {
       btnAtivo.classList.add('active', 'btn-primary');
     }
 
-    if (aba === 'montar') carregarPrateleiras();
+    if (aba === 'montar') {
+      carregarPrateleiras();
+      _carregarPallets();
+    }
   }
 
   // ════════════════════════════════════════════════════════
@@ -168,6 +175,9 @@ const Recebimento = (() => {
     const status = document.getElementById('montar-filtro-status')?.value || 'pre_triagem';
     tbody.innerHTML = `<tr><td colspan="6" class="empty-row"><span class="spinner"></span></td></tr>`;
 
+    // Atualiza a indicação de destino com base no filtro selecionado
+    _atualizarDestinoIndicador(status);
+
     try {
       const res = await Api.equipamento.listar(status);
       _itensPrateleira = res.data;
@@ -176,6 +186,31 @@ const Recebimento = (() => {
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</td></tr>`;
       Toast.error('Erro ao carregar prateleira', err.message);
+    }
+  }
+
+  function _atualizarDestinoIndicador(status) {
+    const indicador = document.getElementById('montar-destino-info');
+    if (!indicador) return;
+
+    if (status === 'pre_triagem') {
+      indicador.innerHTML = `
+        <span class="badge badge-warning" style="font-size:13px;padding:6px 12px">
+          Destino: Ag. Triagem (criará reparos automaticamente)
+        </span>
+      `;
+    } else {
+      indicador.innerHTML = `
+        <span class="badge badge-info" style="font-size:13px;padding:6px 12px">
+          Destino: Venda / Sucata (saída do WMS)
+        </span>
+      `;
+    }
+
+    // Mostrar/ocultar campos de endereço (apenas para triagem)
+    const enderecoGroup = document.getElementById('montar-endereco-group');
+    if (enderecoGroup) {
+      enderecoGroup.style.display = status === 'pre_triagem' ? 'block' : 'none';
     }
   }
 
@@ -203,17 +238,17 @@ const Recebimento = (() => {
     `).join('');
   }
 
-  async function _carregarCaixasDestino() {
+  async function _carregarPallets() {
     try {
-      const res = await Api.endereco.listar();
-      _todosCaixas = res.data.filter(e => e.ativo && !['RECV-CX-PRETRIAGEM', 'RECV-CX-PREVENDA'].includes(e.codigo));
+      const res = await Api.pallets.listar();
+      _pallets = res.data || [];
 
-      const sel = document.getElementById('montar-caixa-destino');
+      const sel = document.getElementById('montar-pallet-destino');
       if (!sel) return;
-      sel.innerHTML = '<option value="">Selecione o endereço...</option>' +
-        _todosCaixas.map(c => `<option value="${c.id}">${escapeHtml(c.codigo)}${c.descricao ? ' — ' + escapeHtml(c.descricao) : ''}</option>`).join('');
+      sel.innerHTML = '<option value="">Selecione o pallet...</option>' +
+        _pallets.map(p => `<option value="${p.id}">${escapeHtml(p.codigo)} — ${escapeHtml(p.endereco_codigo || '')}</option>`).join('');
     } catch (err) {
-      Toast.error('Erro ao carregar endereços de destino', err.message);
+      Toast.error('Erro ao carregar pallets', err.message);
     }
   }
 
@@ -237,30 +272,60 @@ const Recebimento = (() => {
       return;
     }
 
-    const status_destino     = document.getElementById('montar-status-destino').value;
-    const endereco_destino_id = parseInt(document.getElementById('montar-caixa-destino').value, 10);
-    const observacao         = document.getElementById('montar-obs').value.trim();
+    // Inferir destino automaticamente a partir do filtro superior
+    const filtroStatus = document.getElementById('montar-filtro-status')?.value || 'pre_triagem';
+    const status_destino = filtroStatus === 'pre_triagem' ? 'ag_triagem' : 'venda';
 
-    if (status_destino === 'ag_triagem' && !endereco_destino_id) {
-      Toast.warning('Selecione um endereço de destino para Ag. Triagem.');
-      return;
+    // Para ag_triagem, precisa de pallet para criar caixa dinamicamente
+    let endereco_destino_id = null;
+    let caixaInfo = null;
+
+    if (status_destino === 'ag_triagem') {
+      const palletId = document.getElementById('montar-pallet-destino')?.value;
+      if (!palletId) {
+        Toast.warning('Selecione um pallet de destino para Ag. Triagem.');
+        return;
+      }
+
+      // Criar caixa automaticamente com numeração sequencial
+      try {
+        const caixaRes = await Api.caixas.criarAuto({ pallet_id: palletId });
+        caixaInfo = caixaRes.data;
+        // Para o backend de montarPallet, o endereco_destino_id é o endereço do pallet
+        const pallet = _pallets.find(p => p.id === palletId);
+        if (pallet) {
+          endereco_destino_id = pallet.endereco_id;
+        } else {
+          // Fallback: buscar da lista
+          const endRes = await Api.endereco.listar();
+          const palletEnd = endRes.data.find(e => e.id === parseInt(palletId, 10));
+          endereco_destino_id = palletEnd?.id || null;
+        }
+      } catch (err) {
+        Toast.error('Erro ao criar caixa', err.message);
+        return;
+      }
     }
 
-    // Para 'venda', endereco_destino_id pode ser null (sai do WMS)
+    const observacao = document.getElementById('montar-obs')?.value.trim();
+
     const payload = {
       equipamento_ids,
       status_destino,
-      endereco_destino_id: status_destino === 'venda' ? (endereco_destino_id || null) : endereco_destino_id,
+      endereco_destino_id: status_destino === 'venda' ? null : endereco_destino_id,
       observacao,
     };
+
+    const destinoLabel = status_destino === 'ag_triagem'
+      ? `Ag. Triagem (criará reparos) — Caixa: ${caixaInfo?.codigo || '—'}`
+      : 'Venda / Sucata (sai do WMS)';
 
     Modal.abrir({
       titulo: 'Confirmar Montagem de Pallet',
       corpo: `
         <p>Você está prestes a transferir <strong>${equipamento_ids.length} item(ns)</strong> para:</p>
         <ul style="margin:1rem 0;padding-left:1.5rem">
-          <li>Destino: <strong>${status_destino === 'ag_triagem' ? 'Ag. Triagem (criará reparos)' : 'Venda / Sucata (sai do WMS)'}</strong></li>
-          ${status_destino === 'ag_triagem' ? `<li>Caixa: <strong>${escapeHtml(document.getElementById('montar-caixa-destino').selectedOptions[0]?.text || '')}</strong></li>` : ''}
+          <li>Destino: <strong>${destinoLabel}</strong></li>
         </ul>
         <p style="color:var(--c-text-secondary);font-size:13px">Esta operação não pode ser desfeita facilmente.</p>
       `,
@@ -279,7 +344,8 @@ const Recebimento = (() => {
       const res = await Api.equipamento.montarPallet(payload);
       Toast.success('Pallet montado!', res.message);
       // Desmarca todos e recarrega
-      document.getElementById('montar-check-all').checked = false;
+      const checkAll = document.getElementById('montar-check-all');
+      if (checkAll) checkAll.checked = false;
       await carregarPrateleiras();
       _atualizarBadge();
     } catch (err) {

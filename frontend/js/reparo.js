@@ -1,11 +1,14 @@
 /**
  * PIOERP — Módulo: Central de Reparo
  *
- * Funcionalidades:
+ * Novo fluxo de trabalho:
  * 1. Painel de Críticos — modelos abaixo do estoque mínimo (com botão Solicitar Lote)
- * 2. Tabela de prioridades (query complexa do backend)
- * 3. Painel de controle com timer de sessão em tempo real
- * 4. Fluxo: Iniciar → Pausar → Retomar → Finalizar (com destino: reposição, pré-venda ou venda)
+ * 2. Painel de Solicitações Atendidas — cards de pallets disponibilizados pelo almoxarife
+ *    - Técnico clica no card → abre modal de bipagem (leitura de Nº Série ou Imobilizado)
+ *    - Após bipar, o sistema busca o equipamento e abre o formulário de manutenção
+ * 3. Tabela de prioridades — apenas itens solicitados ativamente pelo técnico
+ * 4. Painel de controle com timer de sessão em tempo real
+ * 5. Fluxo: Iniciar → Pausar → Retomar → Finalizar (com destino: reposição ou pré-venda)
  */
 
 const Reparo = (() => {
@@ -21,6 +24,7 @@ const Reparo = (() => {
   async function carregar() {
     await Promise.all([
       _carregarCriticos(),
+      _carregarSolicitacoesAtendidas(),
       _carregarFila(),
     ]);
   }
@@ -93,7 +97,178 @@ const Reparo = (() => {
   }
 
   // ════════════════════════════════════════════════════════
-  // TABELA DE PRIORIDADES (fila de reparo)
+  // PAINEL DE SOLICITAÇÕES ATENDIDAS (pallets disponibilizados)
+  // ════════════════════════════════════════════════════════
+
+  async function _carregarSolicitacoesAtendidas() {
+    const container = document.getElementById('reparo-solicitacoes-atendidas');
+    if (!container) return;
+
+    container.innerHTML = `<div class="empty-row"><span class="spinner"></span></div>`;
+    try {
+      const res = await Api.reparo.solicitacoesAtendidas();
+      _renderizarSolicitacoesAtendidas(res.data);
+    } catch (err) {
+      container.innerHTML = `<div class="empty-row" style="color:var(--c-danger)">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function _renderizarSolicitacoesAtendidas(lista) {
+    const container = document.getElementById('reparo-solicitacoes-atendidas');
+    const panel = document.getElementById('reparo-atendidas-panel');
+
+    if (!lista.length) {
+      if (panel) panel.style.display = 'none';
+      return;
+    }
+
+    if (panel) panel.style.display = 'block';
+
+    container.innerHTML = lista.map(s => `
+      <div class="solicitacao-card" onclick="Reparo.abrirBipagem(${s.id}, '${escapeHtml(s.modelo)}', ${s.item_catalogo_id})"
+           style="cursor:pointer;border:1px solid var(--c-border);border-radius:8px;padding:16px;margin-bottom:12px;
+                  background:var(--c-bg);transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.06);"
+           onmouseover="this.style.borderColor='var(--c-primary)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.12)'"
+           onmouseout="this.style.borderColor='var(--c-border)';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:4px">${escapeHtml(s.modelo)}</div>
+            <div style="font-size:12px;color:var(--c-text-muted)">${escapeHtml(s.categoria)}</div>
+          </div>
+          <span class="badge badge-success">Pallet Disponível</span>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:12px;font-size:13px">
+          <div>
+            <span style="color:var(--c-text-muted)">Itens Ag. Triagem:</span>
+            <strong style="color:var(--c-warning)">${s.qtd_aguardando_triagem}</strong>
+          </div>
+          <div>
+            <span style="color:var(--c-text-muted)">Atendido em:</span>
+            <strong>${formatDateTime(s.atendida_em)}</strong>
+          </div>
+          ${s.deficit > 0 ? `
+          <div>
+            <span style="color:var(--c-text-muted)">Déficit:</span>
+            <span class="badge badge-danger">-${Math.abs(s.deficit)}</span>
+          </div>
+          ` : ''}
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--c-primary);font-weight:600">
+          Clique para bipar um equipamento deste pallet
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ════════════════════════════════════════════════════════
+  // MODAL DE BIPAGEM (leitura de Nº Série / Imobilizado)
+  // ════════════════════════════════════════════════════════
+
+  function abrirBipagem(solicitacaoId, modelo, catalogoId) {
+    Modal.abrir({
+      titulo: `Bipar Equipamento — ${modelo}`,
+      corpo: `
+        <div style="text-align:center;padding:1rem 0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--c-primary)" stroke-width="1.5" width="48" height="48" style="margin:0 auto 1rem">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="7" y1="8" x2="7" y2="16"/>
+            <line x1="9" y1="7" x2="9" y2="17"/>
+            <line x1="11" y1="8" x2="11" y2="16"/>
+            <line x1="13" y1="6" x2="13" y2="18"/>
+            <line x1="15" y1="8" x2="15" y2="16"/>
+            <line x1="17" y1="7" x2="17" y2="17"/>
+          </svg>
+          <p style="font-size:14px;margin-bottom:16px">
+            Leia ou digite o <strong>Número de Série</strong> ou <strong>Imobilizado</strong> do equipamento:
+          </p>
+          <div class="form-group" style="max-width:400px;margin:0 auto">
+            <div class="input-with-btn">
+              <input type="text" id="bipagem-input" class="input-text"
+                placeholder="Nº Série ou Imobilizado..."
+                autofocus
+                style="font-size:18px;text-align:center;letter-spacing:1px;font-weight:600" />
+            </div>
+          </div>
+          <div id="bipagem-resultado" style="margin-top:16px"></div>
+        </div>
+      `,
+      rodape: `
+        <button class="btn btn-outline" onclick="Modal.fechar()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-bipagem-buscar" onclick="Reparo._executarBipagem(${solicitacaoId})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Buscar
+        </button>
+      `,
+    });
+
+    // Permite submeter com Enter
+    setTimeout(() => {
+      const input = document.getElementById('bipagem-input');
+      if (input) {
+        input.focus();
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            Reparo._executarBipagem(solicitacaoId);
+          }
+        });
+      }
+    }, 150);
+  }
+
+  async function _executarBipagem(solicitacaoId) {
+    const input = document.getElementById('bipagem-input');
+    const resultado = document.getElementById('bipagem-resultado');
+    const query = input?.value.trim();
+
+    if (!query) {
+      Toast.warning('Informe o Número de Série ou Imobilizado.');
+      return;
+    }
+
+    resultado.innerHTML = `<span class="spinner"></span> Buscando...`;
+
+    try {
+      const res = await Api.reparo.buscarBipagem(query);
+      const equip = res.data;
+
+      if (!equip.reparo_id) {
+        resultado.innerHTML = `
+          <div style="color:var(--c-danger);padding:8px">
+            Equipamento encontrado mas não possui reparo ativo.
+          </div>
+        `;
+        return;
+      }
+
+      // Vincular reparo à solicitação
+      try {
+        await Api.reparo.vincularSolicitacao(equip.reparo_id, {
+          solicitacao_pallet_id: solicitacaoId,
+        });
+      } catch (_) {
+        // Pode falhar se já vinculado — ignora
+      }
+
+      Modal.fechar();
+
+      // Abre o painel de controle para este reparo
+      Toast.success('Equipamento localizado!', `${equip.modelo} — ${equip.numero_serie}`);
+      await selecionarReparo(equip.reparo_id);
+      await _carregarFila();
+      await _carregarSolicitacoesAtendidas();
+
+    } catch (err) {
+      resultado.innerHTML = `
+        <div style="color:var(--c-danger);padding:8px;font-size:13px">
+          ${escapeHtml(err.message)}
+        </div>
+      `;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════
+  // TABELA DE PRIORIDADES (fila de reparo — apenas solicitados)
   // ════════════════════════════════════════════════════════
 
   async function _carregarFila() {
@@ -112,8 +287,7 @@ const Reparo = (() => {
     const tbody = document.getElementById('tbody-reparo');
 
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty-row">Nenhum equipamento aguardando reparo.</td></tr>`;
-      fecharPainel();
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-row">Nenhum equipamento solicitado aguardando reparo. Use o painel acima para bipar itens.</td></tr>`;
       return;
     }
 
@@ -155,7 +329,7 @@ const Reparo = (() => {
               ${formatMinutos(r.total_minutos_trabalhados)}
             </span>
           </td>
-          <td style="font-size:12px"><code>${escapeHtml(r.endereco_codigo || r.caixa_codigo || '—')}</code></td>
+          <td style="font-size:12px"><code>${escapeHtml(r.endereco_codigo || '—')}</code></td>
           <td>
             <div class="action-group">
               <button
@@ -260,12 +434,7 @@ const Reparo = (() => {
   // TIMER
   // ════════════════════════════════════════════════════════
 
-  /**
-   * Inicia o timer local para o reparo em progresso.
-   * Considera o tempo da sessão mais recente (que ainda não tem fim).
-   */
   function _iniciarTimerLocal(reparoId, totalMinutos, sessoes) {
-    // Encontra a sessão aberta (sem fim)
     const sessaoAberta = sessoes?.find(s => !s.fim);
     const sessaoInicio = sessaoAberta ? new Date(sessaoAberta.inicio) : new Date();
 
@@ -276,7 +445,7 @@ const Reparo = (() => {
     };
 
     _timerInterval = setInterval(_tickTimer, 1000);
-    _tickTimer(); // Primeiro tick imediato
+    _tickTimer();
   }
 
   function _tickTimer() {
@@ -288,7 +457,6 @@ const Reparo = (() => {
 
     _setTimerDisplay(totalSegs);
 
-    // Atualiza também a coluna de tempo na tabela
     const tabCel = document.getElementById(`tabela-timer-${_reparoAtivo.reparoId}`);
     if (tabCel) {
       const m = Math.floor(totalSegs / 60);
@@ -317,7 +485,7 @@ const Reparo = (() => {
       const res = await Api.reparo.iniciar(_reparoSelecionadoId);
       Toast.success(res.message || 'Reparo iniciado!');
       await selecionarReparo(_reparoSelecionadoId);
-      await _carregarFila(); // Atualiza tabela
+      await _carregarFila();
     } catch (err) {
       Toast.error('Erro', err.message);
       btn.disabled = false;
@@ -395,7 +563,6 @@ const Reparo = (() => {
           pre_venda: 'O equipamento irá para Ag. Venda aguardando destinação final (venda ou sucata).',
         };
         document.getElementById('fin-destino-hint').textContent = hints[e.target.value] || '';
-        // Mostrar/ocultar campo de filial
         document.getElementById('fin-filial-group').style.display =
           e.target.value === 'reposicao' ? 'block' : 'none';
       });
@@ -480,7 +647,7 @@ const Reparo = (() => {
         observacao,
       });
       Toast.success('Solicitação enviada!', res.message);
-      await _carregarCriticos(); // Atualiza painel de críticos (botão vira "Solicitado")
+      await _carregarCriticos();
     } catch (err) {
       Toast.error('Erro ao solicitar lote', err.message);
     }
@@ -493,7 +660,6 @@ const Reparo = (() => {
     document.getElementById('reparo-control-panel').style.display = 'none';
     document.getElementById('timer-display').textContent = '00:00:00';
     document.getElementById('timer-display').style.color = '';
-    // Remove seleção de linha
     document.querySelectorAll('#tbody-reparo tr').forEach(tr => tr.classList.remove('row-selected'));
   }
 
@@ -503,5 +669,6 @@ const Reparo = (() => {
     iniciar, pausar, abrirModalFinalizar, _confirmarFinalizar,
     salvarNotas,
     abrirModalSolicitarLote, _confirmarSolicitarLote,
+    abrirBipagem, _executarBipagem,
   };
 })();

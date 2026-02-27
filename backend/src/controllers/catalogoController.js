@@ -7,7 +7,7 @@ exports.list = async (req, res, next) => {
   try {
     const { rows } = await db.query(`
       SELECT
-        id, nome, categoria,
+        id, codigo, nome, categoria,
         estoque_minimo, estoque_maximo,
         qtd_reposicao, qtd_ag_triagem, qtd_venda, qtd_total,
         deficit, estoque_critico,
@@ -37,7 +37,7 @@ exports.getById = async (req, res, next) => {
 // ── Criar ────────────────────────────────────────────────────────────────────
 exports.create = async (req, res, next) => {
   try {
-    const { nome, categoria, estoque_minimo = 0, estoque_maximo = 0 } = req.body;
+    const { nome, categoria, codigo, estoque_minimo = 0, estoque_maximo = 0 } = req.body;
 
     if (!nome?.trim())      { const e = new Error('Campo "nome" é obrigatório.');      e.status = 400; throw e; }
     if (!categoria?.trim()) { const e = new Error('Campo "categoria" é obrigatório.'); e.status = 400; throw e; }
@@ -46,9 +46,9 @@ exports.create = async (req, res, next) => {
     }
 
     const { rows } = await db.query(
-      `INSERT INTO item_catalogo (nome, categoria, estoque_minimo, estoque_maximo)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [nome.trim(), categoria.trim(), estoque_minimo, estoque_maximo]
+      `INSERT INTO item_catalogo (nome, categoria, codigo, estoque_minimo, estoque_maximo)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [nome.trim(), categoria.trim(), codigo?.trim() || null, estoque_minimo, estoque_maximo]
     );
     res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
@@ -58,7 +58,7 @@ exports.create = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { nome, categoria, estoque_minimo, estoque_maximo, ativo } = req.body;
+    const { nome, categoria, codigo, estoque_minimo, estoque_maximo, ativo } = req.body;
 
     // Buscar valores atuais para merge
     const cur = await db.query('SELECT * FROM item_catalogo WHERE id = $1', [id]);
@@ -69,6 +69,7 @@ exports.update = async (req, res, next) => {
 
     const novoNome         = (nome      !== undefined) ? nome.trim()      : prev.nome;
     const novaCategoria    = (categoria !== undefined) ? categoria.trim() : prev.categoria;
+    const novoCodigo       = (codigo    !== undefined) ? (codigo?.trim() || null) : prev.codigo;
     const novoMin          = (estoque_minimo  !== undefined) ? Number(estoque_minimo)  : prev.estoque_minimo;
     const novoMax          = (estoque_maximo  !== undefined) ? Number(estoque_maximo)  : prev.estoque_maximo;
     const novoAtivo        = (ativo !== undefined) ? Boolean(ativo) : prev.ativo;
@@ -79,10 +80,10 @@ exports.update = async (req, res, next) => {
 
     const { rows } = await db.query(
       `UPDATE item_catalogo
-         SET nome = $1, categoria = $2, estoque_minimo = $3, estoque_maximo = $4, ativo = $5
-       WHERE id = $6
+         SET nome = $1, categoria = $2, codigo = $3, estoque_minimo = $4, estoque_maximo = $5, ativo = $6
+       WHERE id = $7
        RETURNING *`,
-      [novoNome, novaCategoria, novoMin, novoMax, novoAtivo, id]
+      [novoNome, novaCategoria, novoCodigo, novoMin, novoMax, novoAtivo, id]
     );
     res.json({ success: true, data: rows[0] });
   } catch (err) { next(err); }

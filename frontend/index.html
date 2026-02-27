@@ -225,6 +225,7 @@
               <thead>
                 <tr>
                   <th>#</th>
+                  <th>Código</th>
                   <th>Modelo / Nome</th>
                   <th>Categoria</th>
                   <th>Mín.</th>
@@ -236,7 +237,7 @@
                 </tr>
               </thead>
               <tbody id="tbody-catalogo">
-                <tr><td colspan="9" class="empty-row">Carregando...</td></tr>
+                <tr><td colspan="10" class="empty-row">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -514,12 +515,25 @@
           </div>
         </div>
 
-        <!-- Tabela de prioridades -->
+        <!-- Painel de Solicitações Atendidas (pallets disponibilizados) -->
+        <div class="card" id="reparo-atendidas-panel" style="display:none">
+          <div class="card-header">
+            <div>
+              <h3>Pallets Disponibilizados</h3>
+              <p class="card-subtitle">Pallets atendidos pelo almoxarife. Clique em um card para bipar o equipamento e iniciar a manutenção.</p>
+            </div>
+          </div>
+          <div class="card-body" id="reparo-solicitacoes-atendidas">
+            <div class="empty-row">Carregando...</div>
+          </div>
+        </div>
+
+        <!-- Tabela de prioridades (apenas itens solicitados pelo técnico) -->
         <div class="card">
           <div class="card-header">
             <div>
-              <h3>Fila de Reparo — Prioridades</h3>
-              <p class="card-subtitle">Itens críticos (estoque abaixo do mínimo) são exibidos primeiro.</p>
+              <h3>Fila de Reparo — Meus Itens</h3>
+              <p class="card-subtitle">Equipamentos solicitados ativamente por você ou em andamento. Bipe itens nos pallets acima para adicioná-los.</p>
             </div>
             <button class="btn btn-sm btn-outline" onclick="Reparo.carregar()">Atualizar</button>
           </div>
@@ -736,18 +750,16 @@
             </div>
           </div>
           <div class="card-body" style="border-top:1px solid var(--c-border)">
-            <div class="form-grid-3">
-              <div class="form-group">
-                <label>Destino dos Itens Selecionados *</label>
-                <select id="montar-status-destino" class="input-select">
-                  <option value="ag_triagem">Ag. Triagem (criará reparo)</option>
-                  <option value="venda">Venda / Sucata (saída do WMS)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Caixa de Destino * <span style="font-size:11px;color:var(--c-text-muted)">(apenas se Ag. Triagem)</span></label>
-                <select id="montar-caixa-destino" class="input-select">
-                  <option value="">Selecione a caixa...</option>
+            <div id="montar-destino-info" style="margin-bottom:12px">
+              <span class="badge badge-warning" style="font-size:13px;padding:6px 12px">
+                Destino: Ag. Triagem (criará reparos automaticamente)
+              </span>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group" id="montar-endereco-group">
+                <label>Pallet de Destino * <span style="font-size:11px;color:var(--c-text-muted)">(uma caixa será criada automaticamente)</span></label>
+                <select id="montar-pallet-destino" class="input-select">
+                  <option value="">Selecione o pallet...</option>
                 </select>
               </div>
               <div class="form-group">
