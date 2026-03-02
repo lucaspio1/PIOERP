@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS solicitacao_pallet (
 CREATE INDEX IF NOT EXISTS idx_solicitacao_catalogo ON solicitacao_pallet(item_catalogo_id);
 CREATE INDEX IF NOT EXISTS idx_solicitacao_status   ON solicitacao_pallet(status);
 
--- Trigger updated_at
+-- Trigger updated_at (DROP + CREATE para ser idempotente em PG < 14)
+DROP TRIGGER IF EXISTS trig_solicitacao_updated_at ON solicitacao_pallet;
 CREATE TRIGGER trig_solicitacao_updated_at
     BEFORE UPDATE ON solicitacao_pallet
     FOR EACH ROW EXECUTE FUNCTION fn_updated_at();

@@ -8,9 +8,10 @@ const cors     = require('cors');
 const morgan   = require('morgan');
 const path     = require('path');
 
-const routes       = require('./routes');
-const errorHandler = require('./middleware/errorHandler');
-const db           = require('./config/database');
+const routes        = require('./routes');
+const errorHandler  = require('./middleware/errorHandler');
+const db            = require('./config/database');
+const runMigrations = require('./config/migrate');
 
 // ── Resolução do caminho do frontend ──────────────────────────────────────────
 // Docker:      FRONTEND_PATH=/app/frontend  (setado no docker-compose.yml)
@@ -43,6 +44,7 @@ async function aguardarBanco(tentativas = 15, intervaloMs = 2000) {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 async function bootstrap() {
   await aguardarBanco();
+  await runMigrations();
 
   const app = express();
 

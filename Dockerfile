@@ -17,6 +17,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # ── Código do backend ─────────────────────────────────────────────────────────
 COPY backend/src ./src
 
+# ── Migrations SQL (executadas automaticamente no startup da API) ─────────────
+COPY database/migrations ./database/migrations
+
 # ── Frontend (arquivos estáticos servidos pelo Express) ───────────────────────
 # Copiado para /app/frontend — mapeado via FRONTEND_PATH no docker-compose
 COPY frontend ./frontend
@@ -24,7 +27,8 @@ COPY frontend ./frontend
 # ── Configurações padrão ──────────────────────────────────────────────────────
 ENV NODE_ENV=production \
     PORT=3000 \
-    FRONTEND_PATH=/app/frontend
+    FRONTEND_PATH=/app/frontend \
+    MIGRATIONS_PATH=/app/database/migrations
 
 EXPOSE 3000
 
