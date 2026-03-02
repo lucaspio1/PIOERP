@@ -19,9 +19,9 @@ services:
       - "5432:5432"        # exposto para acesso via DBeaver/pgAdmin no Windows
     volumes:
       - pioerp_pgdata:/var/lib/postgresql/data
-      # Schema SQL executado automaticamente na PRIMEIRA inicialização
+      # Schema SQL executado automaticamente na PRIMEIRA inicialização.
       # As migrations (001-007) já estão incorporadas no schema.sql atual.
-      # Para bancos existentes, aplique manualmente via: docker exec -i <container> psql ...
+      # Migrations pendentes (008+) são aplicadas automaticamente pela API no startup.
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pioerp -d pioerp"]
