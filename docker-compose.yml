@@ -20,7 +20,7 @@ services:
     volumes:
       - pioerp_pgdata:/var/lib/postgresql/data
       # Schema SQL executado automaticamente na PRIMEIRA inicialização
-      # As migrations (002-005) já estão incorporadas no schema.sql atual.
+      # As migrations (001-007) já estão incorporadas no schema.sql atual.
       # Para bancos existentes, aplique manualmente via: docker exec -i <container> psql ...
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:

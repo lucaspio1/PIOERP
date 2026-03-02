@@ -31,6 +31,7 @@ CREATE TABLE item_catalogo (
     id              SERIAL          PRIMARY KEY,
     nome            VARCHAR(255)    NOT NULL,
     categoria       VARCHAR(100)    NOT NULL,
+    codigo          VARCHAR(100),
     estoque_minimo  INTEGER         NOT NULL DEFAULT 0
                     CONSTRAINT chk_cat_estoque_minimo CHECK (estoque_minimo >= 0),
     estoque_maximo  INTEGER         NOT NULL DEFAULT 0
@@ -42,9 +43,11 @@ CREATE TABLE item_catalogo (
 
 CREATE INDEX idx_catalogo_categoria ON item_catalogo (categoria);
 CREATE INDEX idx_catalogo_ativo     ON item_catalogo (ativo);
+CREATE INDEX idx_catalogo_codigo    ON item_catalogo (codigo);
 
 COMMENT ON TABLE  item_catalogo             IS 'Catálogo de modelos/tipos de equipamentos de T.I.';
 COMMENT ON COLUMN item_catalogo.estoque_minimo IS 'Limite crítico: alertas são disparados quando estoque de reposição cai abaixo deste valor.';
+COMMENT ON COLUMN item_catalogo.codigo IS 'Código de cadastro do item no catálogo (ex: NB-001, MON-003).';
 
 
 -- =============================================================================
@@ -155,6 +158,32 @@ COMMENT ON TABLE historico_movimentacao IS 'Auditoria completa de movimentaçõe
 
 
 -- =============================================================================
+-- TABELA: solicitacao_pallet
+-- Canal de comunicação entre Central de Reparo e Almoxarifado.
+-- O técnico solicita a descida de um pallet/caixa de determinado modelo;
+-- o almoxarife atende, registrando a data de conclusão.
+-- =============================================================================
+CREATE TABLE solicitacao_pallet (
+    id                  SERIAL          PRIMARY KEY,
+    item_catalogo_id    INTEGER         NOT NULL
+                        REFERENCES item_catalogo(id) ON DELETE CASCADE,
+    status              VARCHAR(20)     NOT NULL DEFAULT 'pendente'
+                        CONSTRAINT chk_sol_status
+                            CHECK (status IN ('pendente', 'em_andamento', 'atendida', 'cancelada')),
+    observacao          TEXT,
+    atendida_em         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_solicitacao_catalogo ON solicitacao_pallet(item_catalogo_id);
+CREATE INDEX idx_solicitacao_status   ON solicitacao_pallet(status);
+
+COMMENT ON TABLE  solicitacao_pallet IS 'Solicitações do técnico de reparo para o almoxarife baixar um pallet/lote de determinado modelo.';
+COMMENT ON COLUMN solicitacao_pallet.status IS 'Ciclo: pendente → em_andamento → atendida | cancelada';
+
+
+-- =============================================================================
 -- TABELA: reparo
 -- Controla o ciclo de reparo de um equipamento (peça a peça).
 -- Um equipamento em ag_triagem deve ter exatamente um reparo ativo.
@@ -163,6 +192,8 @@ CREATE TABLE reparo (
     id                          SERIAL          PRIMARY KEY,
     equipamento_id              INTEGER         NOT NULL
                                 REFERENCES equipamento_fisico (id) ON DELETE RESTRICT,
+    solicitacao_pallet_id       INTEGER
+                                REFERENCES solicitacao_pallet(id) ON DELETE SET NULL,
     status                      status_rep      NOT NULL DEFAULT 'aguardando',
     descricao_problema          TEXT,
     diagnostico                 TEXT,
@@ -175,11 +206,13 @@ CREATE TABLE reparo (
     updated_at                  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_reparo_equip_id ON reparo (equipamento_id);
-CREATE INDEX idx_reparo_status   ON reparo (status);
+CREATE INDEX idx_reparo_equip_id     ON reparo (equipamento_id);
+CREATE INDEX idx_reparo_status       ON reparo (status);
+CREATE INDEX idx_reparo_solicitacao  ON reparo (solicitacao_pallet_id);
 
 COMMENT ON TABLE  reparo                              IS 'Ordens de reparo para equipamentos na fila de triagem.';
 COMMENT ON COLUMN reparo.total_minutos_trabalhados    IS 'Soma acumulada das sessões de trabalho finalizadas. Não inclui sessão corrente em andamento.';
+COMMENT ON COLUMN reparo.solicitacao_pallet_id IS 'FK para a solicitação de pallet que originou este reparo. NULL para reparos criados fora do fluxo de solicitação.';
 
 
 -- =============================================================================
@@ -226,6 +259,16 @@ CREATE TRIGGER trig_reparo_updated_at
     BEFORE UPDATE ON reparo
     FOR EACH ROW EXECUTE FUNCTION fn_updated_at();
 
+CREATE TRIGGER trig_solicitacao_updated_at
+    BEFORE UPDATE ON solicitacao_pallet
+    FOR EACH ROW EXECUTE FUNCTION fn_updated_at();
+
+
+-- =============================================================================
+-- SEQUENCE: Numeração automática de caixas (CX-001, CX-002...)
+-- =============================================================================
+CREATE SEQUENCE caixa_numero_seq START 1 INCREMENT 1;
+
 
 -- =============================================================================
 -- VIEW: v_estoque_por_catalogo
@@ -234,6 +277,7 @@ CREATE TRIGGER trig_reparo_updated_at
 CREATE OR REPLACE VIEW v_estoque_por_catalogo AS
 SELECT
     ic.id,
+    ic.codigo,
     ic.nome,
     ic.categoria,
     ic.estoque_minimo,
@@ -278,6 +322,7 @@ SELECT
     ef.imobilizado,
 
     ic.id                                                       AS item_catalogo_id,
+    ic.codigo                                                   AS item_codigo,
     ic.nome                                                     AS modelo,
     ic.categoria,
     ic.estoque_minimo,
