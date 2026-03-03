@@ -374,20 +374,20 @@ exports.solicitarLote = async (req, res, next) => {
 };
 
 // ── PALLETS DISPONÍVEIS PARA ATENDER UMA SOLICITAÇÃO ─────────────────────────
-// GET /api/reparo/solicitacoes/:id/pallets-disponiveis
-// Retorna pallets que contêm caixas com equipamentos do modelo solicitado
-// (em status 'reposicao'), agrupados por pallet com contagem de itens.
+// GET /api/reparo/solicitacoes/:id/pallets-disponiveis?endereco_id=X
+// Lista todos os pallets nos porta-pallets (exclui áreas RECV-*).
+// Se endereco_id informado, filtra por esse endereço.
 exports.palletsDisponiveis = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { endereco_id } = req.query;
+    const params = [];
+    const conditions = [`ef.codigo NOT LIKE 'RECV-%'`];
 
-    // Busca a solicitação para obter o item_catalogo_id
-    const sol = await db.query('SELECT item_catalogo_id FROM solicitacao_pallet WHERE id = $1', [Number(id)]);
-    if (!sol.rows.length) {
-      const e = new Error('Solicitação não encontrada.'); e.status = 404; throw e;
+    if (endereco_id) {
+      conditions.push(`p.endereco_id = $${params.push(Number(endereco_id))}`);
     }
 
-    const catalogoId = sol.rows[0].item_catalogo_id;
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const { rows } = await db.query(`
       SELECT
@@ -395,17 +395,14 @@ exports.palletsDisponiveis = async (req, res, next) => {
         p.codigo AS pallet_codigo,
         ef.id    AS endereco_id,
         ef.codigo AS endereco_codigo,
-        COUNT(eq.id) AS qtd_itens
+        COUNT(c.id) AS qtd_caixas
       FROM pallet p
       JOIN endereco_fisico ef ON ef.id = p.endereco_id
-      JOIN caixa c ON c.pallet_id = p.id
-      JOIN equipamento_fisico eq ON eq.caixa_id = c.id
-      WHERE eq.item_catalogo_id = $1
-        AND eq.status = 'reposicao'
-        AND ef.codigo NOT LIKE 'RECV-%'
+      LEFT JOIN caixa c ON c.pallet_id = p.id
+      ${where}
       GROUP BY p.id, p.codigo, ef.id, ef.codigo
-      ORDER BY qtd_itens DESC, p.codigo
-    `, [catalogoId]);
+      ORDER BY ef.codigo, p.codigo
+    `, params);
 
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
