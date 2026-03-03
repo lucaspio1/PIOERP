@@ -9,6 +9,7 @@ router.get('/bipagem',                  ctrl.buscarBipagem);
 router.get('/solicitacoes-atendidas',   ctrl.listarSolicitacoesAtendidas);
 router.get('/solicitacoes',             ctrl.listarSolicitacoes);
 router.post('/solicitar-lote',          ctrl.solicitarLote);
+router.get('/solicitacoes/:id/pallets-disponiveis', ctrl.palletsDisponiveis);
 router.put('/solicitacoes/:id',         ctrl.atualizarSolicitacao);
 router.get('/:id',                      ctrl.getById);
 router.put('/:id',                      ctrl.update);

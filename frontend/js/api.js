@@ -103,6 +103,7 @@ const Api = (() => {
       finalizar:                (id, d)      => Api.post(`/reparo/${id}/finalizar`, d),
       solicitarLote:            (data)       => Api.post('/reparo/solicitar-lote', data),
       listarSolicitacoes:       (status)     => Api.get(`/reparo/solicitacoes${status ? `?status=${status}` : ''}`),
+      palletsDisponiveis:       (id)         => Api.get(`/reparo/solicitacoes/${id}/pallets-disponiveis`),
       atualizarSolicitacao:     (id, d)      => Api.put(`/reparo/solicitacoes/${id}`, d),
       buscarBipagem:            (q)          => Api.get(`/reparo/bipagem?q=${encodeURIComponent(q)}`),
       solicitacoesAtendidas:    ()           => Api.get('/reparo/solicitacoes-atendidas'),

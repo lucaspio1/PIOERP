@@ -70,7 +70,7 @@ const Solicitacoes = (() => {
                 </button>
               ` : ''}
               ${podeAtender ? `
-                <button class="btn btn-sm btn-success" onclick="Solicitacoes.atualizarStatus(${r.id}, 'atendida')" title="Marcar como atendida">
+                <button class="btn btn-sm btn-success" onclick="Solicitacoes.abrirModalAtender(${r.id})" title="Escolher pallet e atender">
                   Atendido
                 </button>
                 <button class="btn btn-sm btn-outline btn-danger-outline" onclick="Solicitacoes.atualizarStatus(${r.id}, 'cancelada')" title="Cancelar">
@@ -98,6 +98,90 @@ const Solicitacoes = (() => {
     }
   }
 
+  // ════════════════════════════════════════════════════════
+  // MODAL: Escolher Pallet para Atender
+  // ════════════════════════════════════════════════════════
+
+  async function abrirModalAtender(solicitacaoId) {
+    Modal.abrir({
+      titulo: 'Escolher Pallet para Atendimento',
+      corpo: `<div class="empty-row"><span class="spinner"></span> Buscando pallets disponíveis...</div>`,
+      rodape: '',
+    });
+
+    try {
+      const res = await Api.reparo.palletsDisponiveis(solicitacaoId);
+      const pallets = res.data;
+
+      if (!pallets.length) {
+        document.getElementById('modal-body').innerHTML = `
+          <div style="text-align:center;padding:24px">
+            <p class="badge badge-warning" style="display:inline-block;padding:8px 14px;margin-bottom:12px">
+              Nenhum pallet encontrado com itens deste modelo em estoque.
+            </p>
+            <p style="color:var(--c-text-muted);font-size:13px">
+              Verifique se há equipamentos em status "Reposição" armazenados em pallets no porta-pallet.
+            </p>
+          </div>
+        `;
+        document.getElementById('modal-footer').innerHTML = `
+          <button class="btn btn-outline" onclick="Modal.fechar()">Fechar</button>
+        `;
+        return;
+      }
+
+      document.getElementById('modal-body').innerHTML = `
+        <div class="form-group">
+          <p style="margin-bottom:12px">
+            Selecione o pallet que será descido do porta-pallet para atender esta solicitação.
+            O pallet será movido para a área de pré-triagem.
+          </p>
+          <label for="sol-pallet-select">Pallet *</label>
+          <select id="sol-pallet-select" class="input-select">
+            <option value="">Selecione o pallet...</option>
+            ${pallets.map(p => `
+              <option value="${p.pallet_id}">
+                ${escapeHtml(p.pallet_codigo)} — ${escapeHtml(p.endereco_codigo)} (${p.qtd_itens} ${p.qtd_itens === 1 ? 'item' : 'itens'})
+              </option>
+            `).join('')}
+          </select>
+        </div>
+      `;
+      document.getElementById('modal-footer').innerHTML = `
+        <button class="btn btn-outline" onclick="Modal.fechar()">Cancelar</button>
+        <button class="btn btn-success" onclick="Solicitacoes._confirmarAtender(${solicitacaoId})">
+          Confirmar Atendimento
+        </button>
+      `;
+    } catch (err) {
+      document.getElementById('modal-body').innerHTML =
+        `<p style="color:var(--c-danger)">${escapeHtml(err.message)}</p>`;
+      document.getElementById('modal-footer').innerHTML = `
+        <button class="btn btn-outline" onclick="Modal.fechar()">Fechar</button>
+      `;
+    }
+  }
+
+  async function _confirmarAtender(solicitacaoId) {
+    const palletId = document.getElementById('sol-pallet-select')?.value;
+    if (!palletId) {
+      Toast.error('Selecione um pallet antes de confirmar.');
+      return;
+    }
+
+    try {
+      const res = await Api.reparo.atualizarSolicitacao(solicitacaoId, {
+        status: 'atendida',
+        pallet_id: palletId,
+      });
+      Modal.fechar();
+      Toast.success(res.message);
+      await carregar();
+    } catch (err) {
+      Toast.error('Erro ao atender solicitação', err.message);
+    }
+  }
+
   // ── Badge na nav ─────────────────────────────────────────
   async function _atualizarBadge(lista) {
     // Conta apenas pendentes para o badge de alerta
@@ -118,5 +202,5 @@ const Solicitacoes = (() => {
     }
   }
 
-  return { carregar, atualizarStatus };
+  return { carregar, atualizarStatus, abrirModalAtender, _confirmarAtender };
 })();
