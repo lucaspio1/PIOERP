@@ -130,7 +130,6 @@ function badgeStatus(status) {
 function badgeStatusSolicitacao(status) {
   const map = {
     pendente:     { label: 'Pendente',     cls: 'badge-warning' },
-    em_andamento: { label: 'Em Andamento', cls: 'badge-info' },
     atendida:     { label: 'Atendida',     cls: 'badge-success' },
     cancelada:    { label: 'Cancelada',    cls: 'badge-gray' },
   };
