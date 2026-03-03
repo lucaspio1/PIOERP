@@ -434,7 +434,7 @@ exports.atualizarSolicitacao = async (req, res, next) => {
       UPDATE solicitacao_pallet
         SET status       = $1,
             observacao   = COALESCE($2, observacao),
-            atendida_em  = CASE WHEN $1 = 'atendida' THEN NOW() ELSE atendida_em END,
+            atendida_em  = CASE WHEN $1::text = 'atendida' THEN NOW() ELSE atendida_em END,
             updated_at   = NOW()
       WHERE id = $3
       RETURNING *
