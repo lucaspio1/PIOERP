@@ -47,8 +47,11 @@ CREATE INDEX IF NOT EXISTS idx_catalogo_codigo ON item_catalogo (codigo);
 
 -- -----------------------------------------------------------------------------
 -- 3. ATUALIZAR VIEW v_estoque_por_catalogo (adiciona campo codigo)
+--    DROP + CREATE porque CREATE OR REPLACE não permite alterar nomes/ordem
+--    de colunas existentes no PostgreSQL.
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE VIEW v_estoque_por_catalogo AS
+DROP VIEW IF EXISTS v_estoque_por_catalogo;
+CREATE VIEW v_estoque_por_catalogo AS
 SELECT
     ic.id,
     ic.codigo,
@@ -81,8 +84,11 @@ WHERE ic.ativo = TRUE;
 
 -- -----------------------------------------------------------------------------
 -- 4. ATUALIZAR VIEW v_prioridades_reparo (adiciona campo item_codigo)
+--    DROP + CREATE porque CREATE OR REPLACE não permite alterar nomes/ordem
+--    de colunas existentes no PostgreSQL.
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE VIEW v_prioridades_reparo AS
+DROP VIEW IF EXISTS v_prioridades_reparo;
+CREATE VIEW v_prioridades_reparo AS
 SELECT
     ef.id                                                       AS equipamento_id,
     ef.numero_serie,
