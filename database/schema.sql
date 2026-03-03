@@ -170,6 +170,8 @@ CREATE TABLE solicitacao_pallet (
     status              VARCHAR(20)     NOT NULL DEFAULT 'pendente'
                         CONSTRAINT chk_sol_status
                             CHECK (status IN ('pendente', 'em_andamento', 'atendida', 'cancelada')),
+    pallet_id           UUID
+                        REFERENCES pallet(id) ON DELETE SET NULL,
     observacao          TEXT,
     atendida_em         TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -178,6 +180,7 @@ CREATE TABLE solicitacao_pallet (
 
 CREATE INDEX idx_solicitacao_catalogo ON solicitacao_pallet(item_catalogo_id);
 CREATE INDEX idx_solicitacao_status   ON solicitacao_pallet(status);
+CREATE INDEX idx_solicitacao_pallet   ON solicitacao_pallet(pallet_id);
 
 COMMENT ON TABLE  solicitacao_pallet IS 'Solicitações do técnico de reparo para o almoxarife baixar um pallet/lote de determinado modelo.';
 COMMENT ON COLUMN solicitacao_pallet.status IS 'Ciclo: pendente → em_andamento → atendida | cancelada';

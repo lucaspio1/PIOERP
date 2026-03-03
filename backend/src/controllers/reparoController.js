@@ -373,6 +373,44 @@ exports.solicitarLote = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ── PALLETS DISPONÍVEIS PARA ATENDER UMA SOLICITAÇÃO ─────────────────────────
+// GET /api/reparo/solicitacoes/:id/pallets-disponiveis
+// Retorna pallets que contêm caixas com equipamentos do modelo solicitado
+// (em status 'reposicao'), agrupados por pallet com contagem de itens.
+exports.palletsDisponiveis = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Busca a solicitação para obter o item_catalogo_id
+    const sol = await db.query('SELECT item_catalogo_id FROM solicitacao_pallet WHERE id = $1', [Number(id)]);
+    if (!sol.rows.length) {
+      const e = new Error('Solicitação não encontrada.'); e.status = 404; throw e;
+    }
+
+    const catalogoId = sol.rows[0].item_catalogo_id;
+
+    const { rows } = await db.query(`
+      SELECT
+        p.id   AS pallet_id,
+        p.codigo AS pallet_codigo,
+        ef.id    AS endereco_id,
+        ef.codigo AS endereco_codigo,
+        COUNT(eq.id) AS qtd_itens
+      FROM pallet p
+      JOIN endereco_fisico ef ON ef.id = p.endereco_id
+      JOIN caixa c ON c.pallet_id = p.id
+      JOIN equipamento_fisico eq ON eq.caixa_id = c.id
+      WHERE eq.item_catalogo_id = $1
+        AND eq.status = 'reposicao'
+        AND ef.codigo NOT LIKE 'RECV-%'
+      GROUP BY p.id, p.codigo, ef.id, ef.codigo
+      ORDER BY qtd_itens DESC, p.codigo
+    `, [catalogoId]);
+
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+};
+
 // ── LISTAR SOLICITAÇÕES DE PALLET ─────────────────────────────────────────────
 // GET /api/reparo/solicitacoes?status=pendente
 exports.listarSolicitacoes = async (req, res, next) => {
@@ -418,34 +456,67 @@ exports.listarSolicitacoes = async (req, res, next) => {
 
 // ── ATUALIZAR STATUS DE SOLICITAÇÃO (almoxarife atende) ───────────────────────
 // PUT /api/reparo/solicitacoes/:id
+// Quando status = 'atendida', exige pallet_id. O pallet escolhido é movido
+// para o endereço de pré-triagem (RECV-CX-PRETRIAGEM).
 exports.atualizarSolicitacao = async (req, res, next) => {
+  const client = await db.pool.connect();
   try {
     const { id } = req.params;
-    const { status, observacao } = req.body;
+    const { status, observacao, pallet_id } = req.body;
 
     const validos = ['pendente', 'em_andamento', 'atendida', 'cancelada'];
     if (!status || !validos.includes(status)) {
       const e = new Error(`"status" é obrigatório. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
     }
 
-    const atendidaEm = status === 'atendida' ? 'NOW()' : 'atendida_em';
+    if (status === 'atendida' && !pallet_id) {
+      const e = new Error('É necessário escolher um pallet para atender a solicitação.'); e.status = 400; throw e;
+    }
 
-    const { rows } = await db.query(`
+    await client.query('BEGIN');
+
+    // 1. Atualizar solicitação
+    const { rows } = await client.query(`
       UPDATE solicitacao_pallet
         SET status       = $1,
             observacao   = COALESCE($2, observacao),
             atendida_em  = CASE WHEN $3 = 'atendida' THEN NOW() ELSE atendida_em END,
+            pallet_id    = CASE WHEN $3 = 'atendida' THEN $4::uuid ELSE pallet_id END,
             updated_at   = NOW()
-      WHERE id = $4
+      WHERE id = $5
       RETURNING *
-    `, [status, observacao?.trim() || null, status, Number(id)]);
+    `, [status, observacao?.trim() || null, status, pallet_id || null, Number(id)]);
 
     if (!rows.length) {
+      await client.query('ROLLBACK');
       const e = new Error('Solicitação não encontrada.'); e.status = 404; throw e;
     }
 
+    // 2. Se atendida, mover pallet para área de pré-triagem
+    if (status === 'atendida' && pallet_id) {
+      const recv = await client.query(
+        `SELECT id FROM endereco_fisico WHERE codigo = 'RECV-CX-PRETRIAGEM' LIMIT 1`
+      );
+      if (!recv.rows.length) {
+        await client.query('ROLLBACK');
+        const e = new Error('Endereço RECV-CX-PRETRIAGEM não encontrado. Verifique a configuração.'); e.status = 500; throw e;
+      }
+
+      await client.query(
+        `UPDATE pallet SET endereco_id = $1 WHERE id = $2`,
+        [recv.rows[0].id, pallet_id]
+      );
+    }
+
+    await client.query('COMMIT');
+
     res.json({ success: true, data: rows[0], message: `Solicitação marcada como "${status}".` });
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 };
 
 // ── BUSCAR EQUIPAMENTO POR BIPAGEM (Nº Série ou Imobilizado) ─────────────────
