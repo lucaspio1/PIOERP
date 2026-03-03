@@ -98,46 +98,46 @@ const Solicitacoes = (() => {
   async function abrirModalAtender(solicitacaoId) {
     Modal.abrir({
       titulo: 'Escolher Pallet para Atendimento',
-      corpo: `<div class="empty-row"><span class="spinner"></span> Buscando pallets disponíveis...</div>`,
+      tamanho: 'lg',
+      corpo: `<div class="empty-row"><span class="spinner"></span> Carregando endereços...</div>`,
       rodape: '',
     });
 
     try {
-      const res = await Api.reparo.palletsDisponiveis(solicitacaoId);
-      const pallets = res.data;
-
-      if (!pallets.length) {
-        document.getElementById('modal-body').innerHTML = `
-          <div style="text-align:center;padding:24px">
-            <p class="badge badge-warning" style="display:inline-block;padding:8px 14px;margin-bottom:12px">
-              Nenhum pallet encontrado com itens deste modelo em estoque.
-            </p>
-            <p style="color:var(--c-text-muted);font-size:13px">
-              Verifique se há equipamentos em status "Reposição" armazenados em pallets no porta-pallet.
-            </p>
-          </div>
-        `;
-        document.getElementById('modal-footer').innerHTML = `
-          <button class="btn btn-outline" onclick="Modal.fechar()">Fechar</button>
-        `;
-        return;
-      }
+      // Carrega endereços (somente porta-pallets, sem RECV-*)
+      const resEnd = await Api.endereco.listar();
+      const enderecos = (resEnd.data || []).filter(e => e.ativo && !e.codigo.startsWith('RECV-'));
 
       document.getElementById('modal-body').innerHTML = `
+        <p style="margin-bottom:16px">
+          Selecione o endereço e o pallet que será descido do porta-pallet.
+          O pallet será movido para a área de pré-triagem.
+        </p>
+
         <div class="form-group">
-          <p style="margin-bottom:12px">
-            Selecione o pallet que será descido do porta-pallet para atender esta solicitação.
-            O pallet será movido para a área de pré-triagem.
-          </p>
-          <label for="sol-pallet-select">Pallet *</label>
-          <select id="sol-pallet-select" class="input-select">
-            <option value="">Selecione o pallet...</option>
-            ${pallets.map(p => `
-              <option value="${p.pallet_id}">
-                ${escapeHtml(p.pallet_codigo)} — ${escapeHtml(p.endereco_codigo)} (${p.qtd_itens} ${p.qtd_itens === 1 ? 'item' : 'itens'})
-              </option>
-            `).join('')}
+          <label for="sol-end-select">1. Endereço (Porta-Pallet) *</label>
+          <select id="sol-end-select" class="input-select" onchange="Solicitacoes._onEnderecoChange(${solicitacaoId})">
+            <option value="">Selecione o endereço...</option>
+            ${enderecos.map(e => `<option value="${e.id}">${escapeHtml(e.codigo)}</option>`).join('')}
           </select>
+        </div>
+
+        <div class="form-group" id="sol-pallet-group" style="display:none">
+          <label>2. Pallet *</label>
+          <div class="input-with-btn">
+            <select id="sol-pallet-select" class="input-select">
+              <option value="">Selecione o pallet...</option>
+            </select>
+            <button type="button" class="btn btn-secondary" onclick="Solicitacoes._mostrarCriarPallet()">+ Pallet</button>
+          </div>
+          <div id="sol-criar-pallet-inline" style="display:none;margin-top:8px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="sol-novo-pallet-codigo" class="input-text" style="flex:1"
+                placeholder="Código ex: P-001" />
+              <button class="btn btn-sm btn-primary" onclick="Solicitacoes._criarPallet(${solicitacaoId})">Criar</button>
+              <button class="btn btn-sm btn-outline" onclick="Solicitacoes._ocultarCriarPallet()">&times;</button>
+            </div>
+          </div>
         </div>
       `;
       document.getElementById('modal-footer').innerHTML = `
@@ -155,6 +155,74 @@ const Solicitacoes = (() => {
     }
   }
 
+  // ── Cascata: ao selecionar endereço, carrega pallets ───
+  async function _onEnderecoChange(solicitacaoId) {
+    const enderecoId = document.getElementById('sol-end-select')?.value;
+    const palletGroup = document.getElementById('sol-pallet-group');
+    const palletSelect = document.getElementById('sol-pallet-select');
+
+    if (!enderecoId) {
+      palletGroup.style.display = 'none';
+      return;
+    }
+
+    palletSelect.innerHTML = `<option value="">Carregando...</option>`;
+    palletGroup.style.display = '';
+    _ocultarCriarPallet();
+
+    try {
+      const res = await Api.pallets.listar(enderecoId);
+      const pallets = res.data || [];
+
+      if (!pallets.length) {
+        palletSelect.innerHTML = `<option value="">Nenhum pallet neste endereço</option>`;
+      } else {
+        palletSelect.innerHTML = `
+          <option value="">Selecione o pallet...</option>
+          ${pallets.map(p => `
+            <option value="${p.id}">${escapeHtml(p.codigo)}</option>
+          `).join('')}
+        `;
+      }
+    } catch (err) {
+      palletSelect.innerHTML = `<option value="">Erro ao carregar pallets</option>`;
+      Toast.error('Erro ao carregar pallets', err.message);
+    }
+  }
+
+  // ── Criar pallet inline ────────────────────────────────
+  function _mostrarCriarPallet() {
+    document.getElementById('sol-criar-pallet-inline').style.display = '';
+    document.getElementById('sol-novo-pallet-codigo').focus();
+  }
+
+  function _ocultarCriarPallet() {
+    document.getElementById('sol-criar-pallet-inline').style.display = 'none';
+    const input = document.getElementById('sol-novo-pallet-codigo');
+    if (input) input.value = '';
+  }
+
+  async function _criarPallet(solicitacaoId) {
+    const codigo = document.getElementById('sol-novo-pallet-codigo')?.value?.trim();
+    const enderecoId = document.getElementById('sol-end-select')?.value;
+
+    if (!codigo) { Toast.error('Informe o código do pallet.'); return; }
+    if (!enderecoId) { Toast.error('Selecione um endereço primeiro.'); return; }
+
+    try {
+      const res = await Api.pallets.criar({ codigo, endereco_id: Number(enderecoId) });
+      Toast.success(`Pallet "${res.data.codigo}" criado.`);
+      _ocultarCriarPallet();
+      // Recarrega pallets e seleciona o novo automaticamente
+      await _onEnderecoChange(solicitacaoId);
+      const select = document.getElementById('sol-pallet-select');
+      if (select) select.value = res.data.id;
+    } catch (err) {
+      Toast.error('Erro ao criar pallet', err.message);
+    }
+  }
+
+  // ── Confirmar atendimento ──────────────────────────────
   async function _confirmarAtender(solicitacaoId) {
     const palletId = document.getElementById('sol-pallet-select')?.value;
     if (!palletId) {
@@ -177,7 +245,6 @@ const Solicitacoes = (() => {
 
   // ── Badge na nav ─────────────────────────────────────────
   async function _atualizarBadge(lista) {
-    // Conta apenas pendentes para o badge de alerta
     let pendentes = 0;
     if (lista) {
       pendentes = lista.filter(s => s.status === 'pendente').length;
@@ -195,5 +262,9 @@ const Solicitacoes = (() => {
     }
   }
 
-  return { carregar, atualizarStatus, abrirModalAtender, _confirmarAtender };
+  return {
+    carregar, atualizarStatus, abrirModalAtender,
+    _onEnderecoChange, _mostrarCriarPallet, _ocultarCriarPallet,
+    _criarPallet, _confirmarAtender,
+  };
 })();
