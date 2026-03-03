@@ -107,9 +107,11 @@ const tiposValidos = ['entrada_compra', 'entrada_retorno_reparo', 'entrada_receb
     }
 
     // Mapeia o status inicial baseado no tipo de entrada
-    let statusInicial = 'reposicao';
+ let statusInicial = 'reposicao';
     if (tipo === 'entrada_recebimento') {
       statusInicial = 'pre_triagem';
+    } else if (tipo === 'entrada_compra') {
+      statusInicial = 'ag_internalizacao'; // Envia para a fila para alocação de caixa
     }
 
     // Verifica se o catálogo existe
