@@ -320,7 +320,7 @@ exports.getCriticos = async (req, res, next) => {
         EXISTS(
           SELECT 1 FROM solicitacao_pallet sp
           WHERE sp.item_catalogo_id = ic.id
-            AND sp.status IN ('pendente', 'em_andamento')
+            AND sp.status = 'pendente'
         ) AS tem_solicitacao_ativa
       FROM v_estoque_por_catalogo v
       JOIN item_catalogo ic      ON ic.id = v.id
@@ -350,9 +350,9 @@ exports.solicitarLote = async (req, res, next) => {
       const e = new Error('Item de catálogo não encontrado.'); e.status = 404; throw e;
     }
 
-    // Verifica se já existe solicitação pendente/em_andamento para este modelo
+    // Verifica se já existe solicitação pendente para este modelo
     const ativa = await db.query(
-      `SELECT id FROM solicitacao_pallet WHERE item_catalogo_id = $1 AND status IN ('pendente', 'em_andamento') LIMIT 1`,
+      `SELECT id FROM solicitacao_pallet WHERE item_catalogo_id = $1 AND status = 'pendente' LIMIT 1`,
       [item_catalogo_id]
     );
     if (ativa.rows.length) {
@@ -420,7 +420,7 @@ exports.listarSolicitacoes = async (req, res, next) => {
     const conditions = [];
 
     if (status) {
-      const validos = ['pendente', 'em_andamento', 'atendida', 'cancelada'];
+      const validos = ['pendente', 'atendida', 'cancelada'];
       if (!validos.includes(status)) {
         const e = new Error(`Status inválido. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
       }
@@ -441,11 +441,10 @@ exports.listarSolicitacoes = async (req, res, next) => {
       ${where}
       ORDER BY
         CASE sp.status
-          WHEN 'pendente'     THEN 1
-          WHEN 'em_andamento' THEN 2
-          WHEN 'atendida'     THEN 3
-          WHEN 'cancelada'    THEN 4
-          ELSE 5
+          WHEN 'pendente'  THEN 1
+          WHEN 'atendida'  THEN 2
+          WHEN 'cancelada' THEN 3
+          ELSE 4
         END,
         sp.created_at DESC
     `, params);
@@ -464,7 +463,7 @@ exports.atualizarSolicitacao = async (req, res, next) => {
     const { id } = req.params;
     const { status, observacao, pallet_id } = req.body;
 
-    const validos = ['pendente', 'em_andamento', 'atendida', 'cancelada'];
+    const validos = ['pendente', 'atendida', 'cancelada'];
     if (!status || !validos.includes(status)) {
       const e = new Error(`"status" é obrigatório. Aceitos: ${validos.join(', ')}`); e.status = 400; throw e;
     }

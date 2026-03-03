@@ -36,9 +36,7 @@ const Solicitacoes = (() => {
     }
 
     tbody.innerHTML = lista.map(r => {
-      const isPendente     = r.status === 'pendente';
-      const isEmAndamento  = r.status === 'em_andamento';
-      const podeAtender    = isPendente || isEmAndamento;
+      const isPendente = r.status === 'pendente';
 
       return `
         <tr class="${isPendente ? 'row-critical' : ''}">
@@ -65,13 +63,8 @@ const Solicitacoes = (() => {
           <td>
             <div class="action-group">
               ${isPendente ? `
-                <button class="btn btn-sm btn-secondary" onclick="Solicitacoes.atualizarStatus(${r.id}, 'em_andamento')" title="Marcar em andamento">
-                  Em Andamento
-                </button>
-              ` : ''}
-              ${podeAtender ? `
                 <button class="btn btn-sm btn-success" onclick="Solicitacoes.abrirModalAtender(${r.id})" title="Escolher pallet e atender">
-                  Atendido
+                  Atender
                 </button>
                 <button class="btn btn-sm btn-outline btn-danger-outline" onclick="Solicitacoes.atualizarStatus(${r.id}, 'cancelada')" title="Cancelar">
                   Cancelar
