@@ -24,6 +24,7 @@ Dockerfile*
 
 # Banco de dados (montado como volume)
 database/
+!database/migrations
 
 # Editor
 .vscode

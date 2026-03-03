@@ -14,6 +14,10 @@ RED='\033[0;31m'
 DIM='\033[2m'
 RESET='\033[0m'
 
+# ── Pausar antes de fechar ────────────────────────────────────────────────────
+# Garante que a janela não feche sozinha em caso de erro ou sucesso
+trap 'echo -e "\n${YELLOW}Pressione [Enter] para fechar esta janela...${RESET}"; read -r' EXIT
+
 # ── Banner ─────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════╗${RESET}"
@@ -39,7 +43,15 @@ fi
 
 # ── Subir containers ───────────────────────────────────────────────────────────
 echo -e "${CYAN}▶ Construindo imagem e subindo containers...${RESET}"
-docker compose up --build -d
+# Se o comando falhar, exibe os logs de erro imediatamente antes de sair
+if ! docker compose up --build -d; then
+  echo ""
+  echo -e "${RED}✗ Erro ao subir os containers! Exibindo os últimos logs para depuração:${RESET}"
+  echo -e "${DIM}─────────────────────────────────────────${RESET}"
+  docker compose logs --tail=50
+  echo -e "${DIM}─────────────────────────────────────────${RESET}"
+  exit 1
+fi
 echo ""
 
 # ── Aguardar banco de dados ────────────────────────────────────────────────────
