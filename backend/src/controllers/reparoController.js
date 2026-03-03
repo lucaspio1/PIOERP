@@ -434,11 +434,11 @@ exports.atualizarSolicitacao = async (req, res, next) => {
       UPDATE solicitacao_pallet
         SET status       = $1,
             observacao   = COALESCE($2, observacao),
-            atendida_em  = CASE WHEN $1::text = 'atendida' THEN NOW() ELSE atendida_em END,
+            atendida_em  = CASE WHEN $3 = 'atendida' THEN NOW() ELSE atendida_em END,
             updated_at   = NOW()
-      WHERE id = $3
+      WHERE id = $4
       RETURNING *
-    `, [status, observacao?.trim() || null, id]);
+    `, [status, observacao?.trim() || null, status, Number(id)]);
 
     if (!rows.length) {
       const e = new Error('Solicitação não encontrada.'); e.status = 404; throw e;
