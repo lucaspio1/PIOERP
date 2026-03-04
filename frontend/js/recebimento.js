@@ -263,7 +263,7 @@ const Recebimento = (() => {
     if (badge) badge.textContent = `${selecionados} item(ns) selecionado(s)`;
   }
 
-  async function confirmarMontarPallet() {
+ async function confirmarMontarPallet() {
     const checkboxes = document.querySelectorAll('.montar-check:checked');
     const equipamento_ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id, 10));
 
@@ -272,52 +272,31 @@ const Recebimento = (() => {
       return;
     }
 
-    // Inferir destino automaticamente a partir do filtro superior
     const filtroStatus = document.getElementById('montar-filtro-status')?.value || 'pre_triagem';
     const status_destino = filtroStatus === 'pre_triagem' ? 'ag_triagem' : 'venda';
-
-    // Para ag_triagem, precisa de pallet para criar caixa dinamicamente
-    let endereco_destino_id = null;
-    let caixaInfo = null;
+    
+    let palletId = null;
 
     if (status_destino === 'ag_triagem') {
-      const palletId = document.getElementById('montar-pallet-destino')?.value;
+      palletId = document.getElementById('montar-pallet-destino')?.value;
       if (!palletId) {
         Toast.warning('Selecione um pallet de destino para Ag. Triagem.');
-        return;
-      }
-
-      // Criar caixa automaticamente com numeração sequencial
-      try {
-        const caixaRes = await Api.caixas.criarAuto({ pallet_id: palletId });
-        caixaInfo = caixaRes.data;
-        // Para o backend de montarPallet, o endereco_destino_id é o endereço do pallet
-        const pallet = _pallets.find(p => p.id === palletId);
-        if (pallet) {
-          endereco_destino_id = pallet.endereco_id;
-        } else {
-          // Fallback: buscar da lista
-          const endRes = await Api.endereco.listar();
-          const palletEnd = endRes.data.find(e => e.id === parseInt(palletId, 10));
-          endereco_destino_id = palletEnd?.id || null;
-        }
-      } catch (err) {
-        Toast.error('Erro ao criar caixa', err.message);
         return;
       }
     }
 
     const observacao = document.getElementById('montar-obs')?.value.trim();
 
+    // Guardamos o palletId no payload, a caixa será criada no momento da execução
     const payload = {
       equipamento_ids,
       status_destino,
-      endereco_destino_id: status_destino === 'venda' ? null : endereco_destino_id,
+      pallet_destino_id: palletId, // Passa o pallet, não o endereço diretamente
       observacao,
     };
 
     const destinoLabel = status_destino === 'ag_triagem'
-      ? `Ag. Triagem (criará reparos) — Caixa: ${caixaInfo?.codigo || '—'}`
+      ? `Ag. Triagem (criará reparos em uma Nova Caixa)`
       : 'Venda / Sucata (sai do WMS)';
 
     Modal.abrir({
@@ -341,8 +320,41 @@ const Recebimento = (() => {
   async function _executarMontarPallet(payload) {
     Modal.fechar();
     try {
-      const res = await Api.equipamento.montarPallet(payload);
-      Toast.success('Pallet montado!', res.message);
+      let endereco_destino_id = null;
+      let caixaInfo = null;
+
+      // Só cria a caixa AGORA, após a confirmação do usuário
+      if (payload.status_destino === 'ag_triagem' && payload.pallet_destino_id) {
+        const caixaRes = await Api.caixas.criarAuto({ pallet_id: payload.pallet_destino_id });
+        caixaInfo = caixaRes.data;
+        
+        // Pega o endereço do pallet
+        const pallet = _pallets.find(p => p.id == payload.pallet_destino_id);
+        if (pallet) {
+          endereco_destino_id = pallet.endereco_id;
+        } else {
+          // Fallback buscando na API se não estiver no cache
+          const endRes = await Api.endereco.listar();
+          const palletEnd = endRes.data.find(e => e.id === parseInt(payload.pallet_destino_id, 10));
+          endereco_destino_id = palletEnd?.id || null;
+        }
+      }
+
+      // Prepara o payload final para a rota de movimentação em lote
+      const payloadFinal = {
+        equipamento_ids: payload.equipamento_ids,
+        status_destino: payload.status_destino,
+        endereco_destino_id: payload.status_destino === 'venda' ? null : endereco_destino_id,
+        // Envia o ID da caixa criada para o backend poder vincular os equipamentos a ela (se aplicável na rota)
+        caixa_destino_id: caixaInfo ? caixaInfo.id : null, 
+        observacao: payload.observacao,
+      };
+
+      const res = await Api.equipamento.montarPallet(payloadFinal);
+      
+      const msgExtra = caixaInfo ? ` Caixa gerada: ${caixaInfo.codigo}` : '';
+      Toast.success('Pallet montado!', res.message + msgExtra);
+      
       // Desmarca todos e recarrega
       const checkAll = document.getElementById('montar-check-all');
       if (checkAll) checkAll.checked = false;

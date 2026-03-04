@@ -228,32 +228,124 @@ exports.createCaixaAuto = async (req, res, next) => {
     const pal = await client.query('SELECT id FROM pallet WHERE id = $1', [pallet_id]);
     if (!pal.rows.length) { const e = new Error('Pallet não encontrado.'); e.status = 404; throw e; }
 
-    // Gera código sequencial baseado no maior existente
-    const { rows: maxRows } = await client.query(`
-      SELECT codigo FROM caixa
-      WHERE codigo ~ '^CX-[0-9]+$'
-      ORDER BY CAST(SUBSTRING(codigo FROM 4) AS INTEGER) DESC
-      LIMIT 1
-      FOR UPDATE
-    `);
-
-    let proximo = 1;
-    if (maxRows.length) {
-      proximo = parseInt(maxRows[0].codigo.replace('CX-', ''), 10) + 1;
-    }
-
-    const codigo = `CX-${String(proximo).padStart(3, '0')}`;
-
+    // Utiliza a SEQUENCE nativa do PostgreSQL para garantir a sequência (Migration 007)
+    // O LPAD formata com zeros à esquerda (ex: 001, 002, 010...)
     const { rows } = await client.query(`
-      INSERT INTO caixa (codigo, pallet_id) VALUES ($1, $2) RETURNING *
-    `, [codigo, pallet_id]);
+      INSERT INTO caixa (codigo, pallet_id)
+      VALUES (
+        'CX-' || LPAD(nextval('caixa_numero_seq')::TEXT, 3, '0'),
+        $1
+      )
+      RETURNING *
+    `, [pallet_id]);
 
     await client.query('COMMIT');
-    res.status(201).json({ success: true, data: rows[0], message: `Caixa ${codigo} criada com sucesso.` });
+    
+    // LINHA CORRIGIDA ABAIXO (sem as barras invertidas):
+    res.status(201).json({ success: true, data: rows[0], message: `Caixa ${rows[0].codigo} criada com sucesso.` });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
   } finally {
     client.release();
   }
+};
+
+// Gera múltiplas caixas de uma vez para o Lote
+exports.gerarCaixasLote = async (req, res) => {
+    const { quantidade, lote_id } = req.body;
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        const caixasGeradas = [];
+
+        for (let i = 0; i < quantidade; i++) {
+            // Utiliza a sequence já existente no schema.sql
+            const resultSeq = await client.query("SELECT nextval('caixa_numero_seq') AS num");
+            const codigoCaixa = `CX-${String(resultSeq.rows[0].num).padStart(5, '0')}`;
+
+            const resultInsert = await client.query(
+                `INSERT INTO caixa (codigo, status, lote_id) 
+                 VALUES ($1, 'aberta', $2) RETURNING id, codigo, status`,
+                [codigoCaixa, lote_id]
+            );
+            caixasGeradas.push(resultInsert.rows[0]);
+        }
+
+        await client.query('COMMIT');
+        
+        // Retorna as caixas para o frontend já disparar a impressão das etiquetas (Passo 2)
+        res.status(201).json({ success: true, caixas: caixasGeradas });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Erro ao gerar lote de caixas.' });
+    } finally {
+        client.release();
+    }
+};
+
+// Vincula um equipamento recém-bipado à caixa
+exports.biparEquipamento = async (req, res) => {
+    const { numero_serie, imobilizado, caixa_codigo, item_catalogo_id } = req.body;
+
+    try {
+        // 1. Validar se a caixa existe e está aberta
+        const caixaRes = await pool.query(`SELECT id FROM caixa WHERE codigo = $1 AND status = 'aberta'`, [caixa_codigo]);
+        if (caixaRes.rowCount === 0) {
+            return res.status(400).json({ error: 'Caixa inválida ou já fechada.' });
+        }
+        const caixa_id = caixaRes.rows[0].id;
+
+        // 2. Inserir o equipamento físico vinculado à caixa
+        const equipRes = await pool.query(
+            `INSERT INTO equipamento_fisico (item_catalogo_id, numero_serie, imobilizado, status, caixa_id)
+             VALUES ($1, $2, $3, 'ag_triagem', $4) RETURNING id`,
+            [item_catalogo_id, numero_serie, imobilizado, caixa_id]
+        );
+
+        // 3. Registrar no histórico de movimentação
+        await pool.query(
+            `INSERT INTO historico_movimentacao (equipamento_id, tipo, status_novo, observacao)
+             VALUES ($1, 'entrada_recebimento', 'ag_triagem', 'Recebimento em Lote via Scanner')`,
+            [equipRes.rows[0].id]
+        );
+
+        res.status(200).json({ success: true, message: 'Equipamento bipado com sucesso!' });
+    } catch (error) {
+        // Tratamento para violação de UNIQUE (número de série/imobilizado duplicado)
+        if (error.code === '23505') {
+            return res.status(400).json({ error: 'Número de série ou patrimônio já cadastrado.' });
+        }
+        res.status(500).json({ error: 'Erro ao registrar equipamento.' });
+    }
+};
+
+// Finaliza a caixa e aloca no Pallet
+exports.alocarCaixaPallet = async (req, res) => {
+    const { caixa_codigo, pallet_codigo } = req.body;
+
+    try {
+        // Busca o ID do pallet pelo código bipado
+        const palletRes = await pool.query(`SELECT id FROM pallet WHERE codigo = $1`, [pallet_codigo]);
+        if (palletRes.rowCount === 0) {
+            return res.status(400).json({ error: 'Pallet não encontrado.' });
+        }
+        const pallet_id = palletRes.rows[0].id;
+
+        // Atualiza a caixa para fechada/alocada e vincula ao pallet
+        const updateCaixa = await pool.query(
+            `UPDATE caixa SET pallet_id = $1, status = 'alocada' 
+             WHERE codigo = $2 AND status = 'aberta' RETURNING id`,
+            [pallet_id, caixa_codigo]
+        );
+
+        if (updateCaixa.rowCount === 0) {
+            return res.status(400).json({ error: 'Caixa não encontrada ou já alocada.' });
+        }
+
+        res.status(200).json({ success: true, message: 'Caixa vinculada ao pallet com sucesso!' });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao alocar caixa.' });
+    }
 };
