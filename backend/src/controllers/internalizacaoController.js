@@ -254,14 +254,14 @@ exports.createCaixaAuto = async (req, res, next) => {
 // Gera múltiplas caixas de uma vez para o Lote
 exports.gerarCaixasLote = async (req, res) => {
     const { quantidade, lote_id } = req.body;
-    const client = await pool.connect();
+    // CORREÇÃO: Usar db.getClient() em vez de pool.connect()
+    const client = await db.getClient(); 
 
     try {
         await client.query('BEGIN');
         const caixasGeradas = [];
 
         for (let i = 0; i < quantidade; i++) {
-            // Utiliza a sequence já existente no schema.sql
             const resultSeq = await client.query("SELECT nextval('caixa_numero_seq') AS num");
             const codigoCaixa = `CX-${String(resultSeq.rows[0].num).padStart(5, '0')}`;
 
@@ -274,11 +274,10 @@ exports.gerarCaixasLote = async (req, res) => {
         }
 
         await client.query('COMMIT');
-        
-        // Retorna as caixas para o frontend já disparar a impressão das etiquetas (Passo 2)
         res.status(201).json({ success: true, caixas: caixasGeradas });
     } catch (error) {
         await client.query('ROLLBACK');
+        console.error(error); // Bom para debugar se der erro
         res.status(500).json({ error: 'Erro ao gerar lote de caixas.' });
     } finally {
         client.release();
@@ -290,22 +289,20 @@ exports.biparEquipamento = async (req, res) => {
     const { numero_serie, imobilizado, caixa_codigo, item_catalogo_id } = req.body;
 
     try {
-        // 1. Validar se a caixa existe e está aberta
-        const caixaRes = await pool.query(`SELECT id FROM caixa WHERE codigo = $1 AND status = 'aberta'`, [caixa_codigo]);
+        // CORREÇÃO: Usar db.query() em vez de pool.query()
+        const caixaRes = await db.query(`SELECT id FROM caixa WHERE codigo = $1 AND status = 'aberta'`, [caixa_codigo]);
         if (caixaRes.rowCount === 0) {
             return res.status(400).json({ error: 'Caixa inválida ou já fechada.' });
         }
         const caixa_id = caixaRes.rows[0].id;
 
-        // 2. Inserir o equipamento físico vinculado à caixa
-        const equipRes = await pool.query(
+        const equipRes = await db.query(
             `INSERT INTO equipamento_fisico (item_catalogo_id, numero_serie, imobilizado, status, caixa_id)
              VALUES ($1, $2, $3, 'ag_triagem', $4) RETURNING id`,
             [item_catalogo_id, numero_serie, imobilizado, caixa_id]
         );
 
-        // 3. Registrar no histórico de movimentação
-        await pool.query(
+        await db.query(
             `INSERT INTO historico_movimentacao (equipamento_id, tipo, status_novo, observacao)
              VALUES ($1, 'entrada_recebimento', 'ag_triagem', 'Recebimento em Lote via Scanner')`,
             [equipRes.rows[0].id]
@@ -313,7 +310,6 @@ exports.biparEquipamento = async (req, res) => {
 
         res.status(200).json({ success: true, message: 'Equipamento bipado com sucesso!' });
     } catch (error) {
-        // Tratamento para violação de UNIQUE (número de série/imobilizado duplicado)
         if (error.code === '23505') {
             return res.status(400).json({ error: 'Número de série ou patrimônio já cadastrado.' });
         }
@@ -326,15 +322,14 @@ exports.alocarCaixaPallet = async (req, res) => {
     const { caixa_codigo, pallet_codigo } = req.body;
 
     try {
-        // Busca o ID do pallet pelo código bipado
-        const palletRes = await pool.query(`SELECT id FROM pallet WHERE codigo = $1`, [pallet_codigo]);
+        // CORREÇÃO: Usar db.query()
+        const palletRes = await db.query(`SELECT id FROM pallet WHERE codigo = $1`, [pallet_codigo]);
         if (palletRes.rowCount === 0) {
             return res.status(400).json({ error: 'Pallet não encontrado.' });
         }
         const pallet_id = palletRes.rows[0].id;
 
-        // Atualiza a caixa para fechada/alocada e vincula ao pallet
-        const updateCaixa = await pool.query(
+        const updateCaixa = await db.query(
             `UPDATE caixa SET pallet_id = $1, status = 'alocada' 
              WHERE codigo = $2 AND status = 'aberta' RETURNING id`,
             [pallet_id, caixa_codigo]
