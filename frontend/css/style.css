@@ -771,3 +771,75 @@ svg { display: block; }
   color: var(--c-primary-dark);
   font-weight: 600;
 }
+
+/* =========================================
+   FLUXO ÁGIL DE RECEBIMENTO (LEITOR ZEBRA)
+   ========================================= */
+.recebimento-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 70vh;
+    padding: 40px 20px;
+    background-color: #f4f6f9;
+}
+
+.recebimento-container .step {
+    background: #ffffff;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    text-align: center;
+    width: 100%;
+    max-width: 550px;
+}
+
+.recebimento-container h2 {
+    margin-bottom: 25px;
+    color: #333;
+    font-size: 22px;
+}
+
+.recebimento-container label {
+    display: block;
+    text-align: left;
+    margin-top: 15px;
+    font-weight: 600;
+    color: #555;
+}
+
+.recebimento-container input, 
+.recebimento-container select {
+    width: 100%;
+    padding: 14px;
+    margin-top: 5px;
+    font-size: 18px; /* Fonte maior facilita visualização do operador */
+    border: 2px solid #ccc;
+    border-radius: 6px;
+    transition: border-color 0.3s;
+}
+
+/* Destaque para quando o campo está focado (esperando o bipe) */
+.recebimento-container input:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.2);
+}
+
+.recebimento-container button {
+    width: 100%;
+    padding: 16px;
+    margin-top: 25px;
+    font-size: 18px;
+    font-weight: bold;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.recebimento-container button:hover {
+    background-color: #0056b3;
+}

@@ -456,12 +456,11 @@ const Recebimento = (() => {
 
         const loteId = `LOTE-${new Date().getTime()}`;
         
-        try {
-            const res = await fetch('/api/recebimento/caixas/lote', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quantidade: qtd, lote_id: loteId })
-            });
+        try {const res = await fetch('/api/internalizacao/caixas/lote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantidade: qtd, lote_id: loteId })
+});
             const data = await res.json();
             
             if (data.success) {
@@ -507,16 +506,16 @@ const Recebimento = (() => {
 
             try {
                 // Salva no banco
-                const res = await fetch('/api/recebimento/bipar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        numero_serie: serial,
-                        imobilizado: patrimonio,
-                        caixa_codigo: caixaAtual,
-                        item_catalogo_id: item_id
-                    })
-                });
+                const res = await fetch('/api/internalizacao/bipar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        numero_serie: serial,
+        imobilizado: patrimonio,
+        caixa_codigo: caixaAtual,
+        item_catalogo_id: item_id
+    })
+});
                 
                 const data = await res.json();
                 if (data.success) {
@@ -558,11 +557,11 @@ const Recebimento = (() => {
             const palletCodigo = inputBiparPallet.value.trim();
             
             try {
-                const res = await fetch('/api/recebimento/alocar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ caixa_codigo: caixaAtual, pallet_codigo: palletCodigo })
-                });
+                const res = await fetch('/api/internalizacao/alocar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ caixa_codigo: caixaAtual, pallet_codigo: palletCodigo })
+});
                 
                 const data = await res.json();
                 if (data.success) {

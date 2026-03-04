@@ -11,4 +11,5 @@ router.post('/:id/aprovar',              ctrl.aprovar);
 router.post('/caixas/lote',              ctrl.gerarCaixasLote);
 router.post('/bipar',                    ctrl.biparEquipamento);
 router.post('/alocar',                   ctrl.alocarCaixaPallet);
+
 module.exports = router;
