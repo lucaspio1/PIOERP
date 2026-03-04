@@ -366,6 +366,55 @@ const Recebimento = (() => {
         badge.style.display = total > 0 ? 'inline-flex' : 'none';
       }
     } catch (_) { /* silencioso */ }
+  } 
+
+  // ── Criar Pallet Inline ──────────────────────────────────────────────
+
+  async function mostrarCriarPallet() {
+    document.getElementById('montar-criar-pallet-inline').style.display = 'block';
+    const selEndereco = document.getElementById('montar-novo-pallet-endereco');
+    
+    // Carregar os endereços caso ainda não estejam carregados
+    if (selEndereco.options.length <= 1) {
+      selEndereco.innerHTML = '<option value="">Carregando...</option>';
+      try {
+        const res = await Api.endereco.listar();
+        // Filtra endereços ativos que não sejam as caixas fixas de recebimento
+        const enderecosValidos = res.data.filter(e => e.ativo && !e.codigo.startsWith('RECV-'));
+        selEndereco.innerHTML = '<option value="">Selecione a posição do WMS...</option>' +
+          enderecosValidos.map(e => `<option value="${e.id}">${escapeHtml(e.codigo)}</option>`).join('');
+      } catch (err) {
+        selEndereco.innerHTML = '<option value="">Erro ao carregar</option>';
+      }
+    }
+    document.getElementById('montar-novo-pallet-codigo').focus();
+  }
+
+  function ocultarCriarPallet() {
+    document.getElementById('montar-criar-pallet-inline').style.display = 'none';
+    const input = document.getElementById('montar-novo-pallet-codigo');
+    if (input) input.value = '';
+  }
+
+  async function criarPallet() {
+    const codigo = document.getElementById('montar-novo-pallet-codigo')?.value?.trim();
+    const endereco_id = document.getElementById('montar-novo-pallet-endereco')?.value;
+
+    if (!endereco_id) { Toast.error('Selecione um endereço (Porta-Pallet).'); return; }
+    if (!codigo) { Toast.error('Informe o código do pallet.'); return; }
+
+    try {
+      const res = await Api.pallets.criar({ codigo, endereco_id: Number(endereco_id) });
+      Toast.success(`Pallet "${res.data.codigo}" criado com sucesso!`);
+      ocultarCriarPallet();
+      
+      // Recarregar a lista de pallets atualizada e selecionar automaticamente o recém-criado
+      await _carregarPallets();
+      const selPallet = document.getElementById('montar-pallet-destino');
+      if (selPallet) selPallet.value = res.data.id;
+    } catch (err) {
+      Toast.error('Erro ao criar pallet', err.message);
+    }
   }
 
   return {
@@ -376,5 +425,8 @@ const Recebimento = (() => {
     _atualizarContadorSelecionados,
     confirmarMontarPallet,
     _executarMontarPallet,
+    mostrarCriarPallet, // <--- ADICIONE ESTA
+    ocultarCriarPallet, // <--- ADICIONE ESTA
+    criarPallet         // <--- ADICIONE ESTA
   };
 })();

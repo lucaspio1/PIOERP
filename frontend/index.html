@@ -757,11 +757,28 @@
             </div>
             <div class="form-grid-2">
               <div class="form-group" id="montar-endereco-group">
-                <label>Pallet de Destino * <span style="font-size:11px;color:var(--c-text-muted)">(uma caixa será criada automaticamente)</span></label>
-                <select id="montar-pallet-destino" class="input-select">
-                  <option value="">Selecione o pallet...</option>
-                </select>
-              </div>
+  <label>Pallet de Destino * <span style="font-size:11px;color:var(--c-text-muted)">(uma caixa será criada automaticamente)</span></label>
+  <div class="input-with-btn">
+    <select id="montar-pallet-destino" class="input-select">
+      <option value="">Selecione o pallet...</option>
+    </select>
+    <button type="button" class="btn btn-secondary" onclick="Recebimento.mostrarCriarPallet()">+ Pallet</button>
+  </div>
+  
+  <div id="montar-criar-pallet-inline" style="display:none;margin-top:8px;padding:12px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-surface)">
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px">Endereço no Porta-Pallet *</label>
+      <select id="montar-novo-pallet-endereco" class="input-select">
+        <option value="">Carregando endereços...</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="montar-novo-pallet-codigo" class="input-text" style="flex:1" placeholder="Cód. Pallet (ex: P-99)" />
+      <button type="button" class="btn btn-sm btn-primary" onclick="Recebimento.criarPallet()">Criar</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="Recebimento.ocultarCriarPallet()">&times;</button>
+    </div>
+  </div>
+</div>
               <div class="form-group">
                 <label>Observações</label>
                 <input type="text" id="montar-obs" class="input-text" placeholder="Opcional..." />
