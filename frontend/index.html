@@ -905,6 +905,51 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+    RECEBIMENTO POR LOTE
+══════════════════════════════════════════════════════════ -->
+<div class="recebimento-container">
+    <div id="step-lote" class="step active">
+        <h2>Iniciar Lote de Recebimento</h2>
+        <input type="number" id="input-qtd-caixas" placeholder="Qtd. de Caixas" min="1">
+        <button id="btn-gerar-lote">Gerar Caixas e Imprimir Etiquetas</button>
+    </div>
+
+    <div id="step-abrir-caixa" class="step" style="display:none;">
+        <h2>Bipe a Caixa para iniciar</h2>
+        <input type="text" id="input-bipar-caixa" placeholder="Bipe o código da Caixa (Ex: CX-00012)">
+    </div>
+
+    <div id="step-bipar-equip" class="step" style="display:none;">
+        <h2 id="caixa-ativa-label">Caixa: Nenhuma</h2>
+        <select id="select-catalogo">
+            <option value="1">Notebook Dell Latitude 5420</option>
+            <option value="2">Monitor LG 24" Full HD IPS</option>
+        </select>
+        
+        <div>
+            <label>Nº de Série</label>
+            <input type="text" id="input-serial" placeholder="Bipe o Número de Série">
+        </div>
+        <div>
+            <label>Patrimônio (Imobilizado)</label>
+            <input type="text" id="input-patrimonio" placeholder="Bipe a Etiqueta de Patrimônio">
+        </div>
+        
+        <p id="msg-feedback" style="color: green; font-weight: bold;"></p>
+        
+        <button id="btn-fechar-caixa">Finalizar Caixa</button>
+    </div>
+
+    <div id="step-alocar-pallet" class="step" style="display:none;">
+        <h2>Alocar Caixa no Pallet</h2>
+        <p id="lbl-caixa-alocar"></p>
+        <input type="text" id="input-bipar-pallet" placeholder="Bipe o código do Pallet (Ex: PLT-001)">
+    </div>
+</div>
+
+
+
 
 
 <!-- ═══════════════════════════════════════════════════════
