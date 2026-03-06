@@ -263,7 +263,7 @@ const Recebimento = (() => {
     if (badge) badge.textContent = `${selecionados} item(ns) selecionado(s)`;
   }
 
-  async function confirmarMontarPallet() {
+ async function confirmarMontarPallet() {
     const checkboxes = document.querySelectorAll('.montar-check:checked');
     const equipamento_ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id, 10));
 
@@ -272,52 +272,31 @@ const Recebimento = (() => {
       return;
     }
 
-    // Inferir destino automaticamente a partir do filtro superior
     const filtroStatus = document.getElementById('montar-filtro-status')?.value || 'pre_triagem';
     const status_destino = filtroStatus === 'pre_triagem' ? 'ag_triagem' : 'venda';
-
-    // Para ag_triagem, precisa de pallet para criar caixa dinamicamente
-    let endereco_destino_id = null;
-    let caixaInfo = null;
+    
+    let palletId = null;
 
     if (status_destino === 'ag_triagem') {
-      const palletId = document.getElementById('montar-pallet-destino')?.value;
+      palletId = document.getElementById('montar-pallet-destino')?.value;
       if (!palletId) {
         Toast.warning('Selecione um pallet de destino para Ag. Triagem.');
-        return;
-      }
-
-      // Criar caixa automaticamente com numeração sequencial
-      try {
-        const caixaRes = await Api.caixas.criarAuto({ pallet_id: palletId });
-        caixaInfo = caixaRes.data;
-        // Para o backend de montarPallet, o endereco_destino_id é o endereço do pallet
-        const pallet = _pallets.find(p => p.id === palletId);
-        if (pallet) {
-          endereco_destino_id = pallet.endereco_id;
-        } else {
-          // Fallback: buscar da lista
-          const endRes = await Api.endereco.listar();
-          const palletEnd = endRes.data.find(e => e.id === parseInt(palletId, 10));
-          endereco_destino_id = palletEnd?.id || null;
-        }
-      } catch (err) {
-        Toast.error('Erro ao criar caixa', err.message);
         return;
       }
     }
 
     const observacao = document.getElementById('montar-obs')?.value.trim();
 
+    // Guardamos o palletId no payload, a caixa será criada no momento da execução
     const payload = {
       equipamento_ids,
       status_destino,
-      endereco_destino_id: status_destino === 'venda' ? null : endereco_destino_id,
+      pallet_destino_id: palletId, // Passa o pallet, não o endereço diretamente
       observacao,
     };
 
     const destinoLabel = status_destino === 'ag_triagem'
-      ? `Ag. Triagem (criará reparos) — Caixa: ${caixaInfo?.codigo || '—'}`
+      ? `Ag. Triagem (criará reparos em uma Nova Caixa)`
       : 'Venda / Sucata (sai do WMS)';
 
     Modal.abrir({
@@ -341,8 +320,41 @@ const Recebimento = (() => {
   async function _executarMontarPallet(payload) {
     Modal.fechar();
     try {
-      const res = await Api.equipamento.montarPallet(payload);
-      Toast.success('Pallet montado!', res.message);
+      let endereco_destino_id = null;
+      let caixaInfo = null;
+
+      // Só cria a caixa AGORA, após a confirmação do usuário
+      if (payload.status_destino === 'ag_triagem' && payload.pallet_destino_id) {
+        const caixaRes = await Api.caixas.criarAuto({ pallet_id: payload.pallet_destino_id });
+        caixaInfo = caixaRes.data;
+        
+        // Pega o endereço do pallet
+        const pallet = _pallets.find(p => p.id == payload.pallet_destino_id);
+        if (pallet) {
+          endereco_destino_id = pallet.endereco_id;
+        } else {
+          // Fallback buscando na API se não estiver no cache
+          const endRes = await Api.endereco.listar();
+          const palletEnd = endRes.data.find(e => e.id === parseInt(payload.pallet_destino_id, 10));
+          endereco_destino_id = palletEnd?.id || null;
+        }
+      }
+
+      // Prepara o payload final para a rota de movimentação em lote
+      const payloadFinal = {
+        equipamento_ids: payload.equipamento_ids,
+        status_destino: payload.status_destino,
+        endereco_destino_id: payload.status_destino === 'venda' ? null : endereco_destino_id,
+        // Envia o ID da caixa criada para o backend poder vincular os equipamentos a ela (se aplicável na rota)
+        caixa_destino_id: caixaInfo ? caixaInfo.id : null, 
+        observacao: payload.observacao,
+      };
+
+      const res = await Api.equipamento.montarPallet(payloadFinal);
+      
+      const msgExtra = caixaInfo ? ` Caixa gerada: ${caixaInfo.codigo}` : '';
+      Toast.success('Pallet montado!', res.message + msgExtra);
+      
       // Desmarca todos e recarrega
       const checkAll = document.getElementById('montar-check-all');
       if (checkAll) checkAll.checked = false;
@@ -366,7 +378,243 @@ const Recebimento = (() => {
         badge.style.display = total > 0 ? 'inline-flex' : 'none';
       }
     } catch (_) { /* silencioso */ }
+  } 
+
+  // ── Criar Pallet Inline ──────────────────────────────────────────────
+
+  async function mostrarCriarPallet() {
+    document.getElementById('montar-criar-pallet-inline').style.display = 'block';
+    const selEndereco = document.getElementById('montar-novo-pallet-endereco');
+    
+    // Carregar os endereços caso ainda não estejam carregados
+    if (selEndereco.options.length <= 1) {
+      selEndereco.innerHTML = '<option value="">Carregando...</option>';
+      try {
+        const res = await Api.endereco.listar();
+        // Filtra endereços ativos que não sejam as caixas fixas de recebimento
+        const enderecosValidos = res.data.filter(e => e.ativo && !e.codigo.startsWith('RECV-'));
+        selEndereco.innerHTML = '<option value="">Selecione a posição do WMS...</option>' +
+          enderecosValidos.map(e => `<option value="${e.id}">${escapeHtml(e.codigo)}</option>`).join('');
+      } catch (err) {
+        selEndereco.innerHTML = '<option value="">Erro ao carregar</option>';
+      }
+    }
+    document.getElementById('montar-novo-pallet-codigo').focus();
   }
+
+  function ocultarCriarPallet() {
+    document.getElementById('montar-criar-pallet-inline').style.display = 'none';
+    const input = document.getElementById('montar-novo-pallet-codigo');
+    if (input) input.value = '';
+  }
+
+  async function criarPallet() {
+    const codigo = document.getElementById('montar-novo-pallet-codigo')?.value?.trim();
+    const endereco_id = document.getElementById('montar-novo-pallet-endereco')?.value;
+
+    if (!endereco_id) { Toast.error('Selecione um endereço (Porta-Pallet).'); return; }
+    if (!codigo) { Toast.error('Informe o código do pallet.'); return; }
+
+    try {
+      const res = await Api.pallets.criar({ codigo, endereco_id: Number(endereco_id) });
+      Toast.success(`Pallet "${res.data.codigo}" criado com sucesso!`);
+      ocultarCriarPallet();
+      
+      // Recarregar a lista de pallets atualizada e selecionar automaticamente o recém-criado
+      await _carregarPallets();
+      const selPallet = document.getElementById('montar-pallet-destino');
+      if (selPallet) selPallet.value = res.data.id;
+    } catch (err) {
+      Toast.error('Erro ao criar pallet', err.message);
+    }
+  }
+
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // Variáveis de Estado
+    let caixaAtual = null;
+
+    // Elementos
+    const stepLote = document.getElementById('step-lote');
+    const stepAbrirCaixa = document.getElementById('step-abrir-caixa');
+    const stepBiparEquip = document.getElementById('step-bipar-equip');
+    const stepAlocar = document.getElementById('step-alocar-pallet');
+    
+    const inputQtd = document.getElementById('input-qtd-caixas');
+    const inputBiparCaixa = document.getElementById('input-bipar-caixa');
+    const inputSerial = document.getElementById('input-serial');
+    const inputPatrimonio = document.getElementById('input-patrimonio');
+    const inputBiparPallet = document.getElementById('input-bipar-pallet');
+    const msgFeedback = document.getElementById('msg-feedback');
+
+    // ==========================================
+    // PASSO 1 e 2: Gerar Lote e Imprimir (Zebra)
+    // ==========================================
+    document.getElementById('btn-gerar-lote').addEventListener('click', async () => {
+        const qtd = parseInt(inputQtd.value);
+        if (!qtd || qtd <= 0) return alert('Insira uma quantidade válida.');
+
+        const loteId = `LOTE-${new Date().getTime()}`;
+        
+        try {const res = await fetch('/api/internalizacao/caixas/lote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantidade: qtd, lote_id: loteId })
+});
+            const data = await res.json();
+            
+            if (data.success) {
+                // Manda imprimir todas as etiquetas geradas de uma vez
+                data.caixas.forEach(c => imprimirEtiquetaZPL(c.codigo));
+                
+                // Muda a tela para aguardar o bipe da primeira caixa impressa
+                alternarTela(stepLote, stepAbrirCaixa);
+                inputBiparCaixa.focus();
+            }
+        } catch (error) {
+            alert('Erro ao gerar lote.');
+        }
+    });
+
+    // ==========================================
+    // PASSO 3: Bipar Caixa
+    // ==========================================
+    inputBiparCaixa.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && inputBiparCaixa.value.trim() !== '') {
+            caixaAtual = inputBiparCaixa.value.trim();
+            document.getElementById('caixa-ativa-label').innerText = `Caixa Aberta: ${caixaAtual}`;
+            
+            alternarTela(stepAbrirCaixa, stepBiparEquip);
+            inputSerial.focus(); // Foco imediato no Serial
+        }
+    });
+
+    // ==========================================
+    // PASSO 4: Loop de Bipar Equipamentos
+    // ==========================================
+    inputSerial.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && inputSerial.value.trim() !== '') {
+            inputPatrimonio.focus(); // Scanner leu o serial, pula pro patrimônio
+        }
+    });
+
+    inputPatrimonio.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter' && inputPatrimonio.value.trim() !== '') {
+            const serial = inputSerial.value.trim();
+            const patrimonio = inputPatrimonio.value.trim();
+            const item_id = document.getElementById('select-catalogo').value;
+
+            try {
+                // Salva no banco
+                const res = await fetch('/api/internalizacao/bipar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        numero_serie: serial,
+        imobilizado: patrimonio,
+        caixa_codigo: caixaAtual,
+        item_catalogo_id: item_id
+    })
+});
+                
+                const data = await res.json();
+                if (data.success) {
+                    msgFeedback.innerText = `Equipamento ${patrimonio} salvo!`;
+                    msgFeedback.style.color = 'green';
+                    
+                    // Limpa e foca novamente no serial para o próximo equipamento (sem usar mouse)
+                    inputSerial.value = '';
+                    inputPatrimonio.value = '';
+                    inputSerial.focus();
+                } else {
+                    msgFeedback.innerText = data.error;
+                    msgFeedback.style.color = 'red';
+                    inputSerial.focus(); // Volta para o serial para tentar de novo
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    });
+
+    // ==========================================
+    // PASSO 5 e 6: Finalizar Caixa
+    // ==========================================
+    document.getElementById('btn-fechar-caixa').addEventListener('click', () => {
+        // Imprime a etiqueta resumo/fechamento (Opcional, caso queira uma etiqueta na caixa cheia)
+        imprimirEtiquetaZPL(caixaAtual, true);
+        
+        document.getElementById('lbl-caixa-alocar').innerText = `Onde você vai colocar a caixa ${caixaAtual}?`;
+        alternarTela(stepBiparEquip, stepAlocar);
+        inputBiparPallet.focus();
+    });
+
+    // ==========================================
+    // PASSO 7 e 8: Alocar no Pallet e Reiniciar
+    // ==========================================
+    inputBiparPallet.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter' && inputBiparPallet.value.trim() !== '') {
+            const palletCodigo = inputBiparPallet.value.trim();
+            
+            try {
+                const res = await fetch('/api/internalizacao/alocar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ caixa_codigo: caixaAtual, pallet_codigo: palletCodigo })
+});
+                
+                const data = await res.json();
+                if (data.success) {
+                    alert(`Caixa vinculada ao pallet ${palletCodigo}!`);
+                    
+                    // Limpa tudo e volta para bipar a próxima caixa do lote
+                    caixaAtual = null;
+                    inputBiparCaixa.value = '';
+                    inputBiparPallet.value = '';
+                    
+                    alternarTela(stepAlocar, stepAbrirCaixa);
+                    inputBiparCaixa.focus();
+                } else {
+                    alert(data.error);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    });
+
+    // --- Utilitários ---
+    function alternarTela(esconder, mostrar) {
+        esconder.style.display = 'none';
+        mostrar.style.display = 'block';
+    }
+
+    // Função para gerar comando ZPL e enviar para impressora Zebra
+    function imprimirEtiquetaZPL(codigoCaixa, fechamento = false) {
+        // Exemplo de código ZPL padrão (EPL/ZPL).
+        const titulo = fechamento ? "CAIXA FECHADA" : "CAIXA LOTE";
+        
+        const stringZPL = `
+        ^XA
+        ^CFA,30
+        ^FO50,50^FDPIOERP - RECEBIMENTO^FS
+        ^CFA,20
+        ^FO50,90^FD${titulo}^FS
+        ^BY3,2,100
+        ^FO50,130^BC^FD${codigoCaixa}^FS
+        ^CFA,30
+        ^FO50,260^FD${codigoCaixa}^FS
+        ^XZ
+        `;
+
+        // Aqui você integra com QZ Tray (via WebSocket), Browser Print API da Zebra, 
+        // ou envia para um endpoint do Node que tenha comunicação raw TCP (porta 9100) com a impressora.
+        console.log(`Enviando ZPL para impressora:\n`, stringZPL);
+        
+        // Exemplo fictício de envio via API local
+        // fetch('http://localhost:9100/print', { method: 'POST', body: stringZPL });
+    }
+});
 
   return {
     carregar, trocarAba,
@@ -376,5 +624,8 @@ const Recebimento = (() => {
     _atualizarContadorSelecionados,
     confirmarMontarPallet,
     _executarMontarPallet,
+    mostrarCriarPallet, // <--- ADICIONE ESTA
+    ocultarCriarPallet, // <--- ADICIONE ESTA
+    criarPallet         // <--- ADICIONE ESTA
   };
 })();
