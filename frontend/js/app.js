@@ -1,12 +1,3 @@
-/**
- * PIOERP — App Core
- * Responsável por: navegação SPA (Dinâmica), utilitários de UI (Toast, Modal)
- * e inicialização dos módulos.
- */
-
-// ═══════════════════════════════════════════════════════
-// TOAST
-// ═══════════════════════════════════════════════════════
 const Toast = (() => {
   const icons = {
     success: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
@@ -41,9 +32,6 @@ const Toast = (() => {
   };
 })();
 
-// ═══════════════════════════════════════════════════════
-// MODAL
-// ═══════════════════════════════════════════════════════
 const Modal = (() => {
   const overlay = () => document.getElementById('modal-overlay');
   const box     = () => document.getElementById('modal-box');
@@ -55,7 +43,6 @@ const Modal = (() => {
     if (tamanho === 'lg') box().classList.add('modal-lg');
     else box().classList.remove('modal-lg');
     overlay().classList.add('open');
-    // Foca no primeiro input
     setTimeout(() => {
       const first = box().querySelector('input, select, textarea');
       if (first) first.focus();
@@ -73,9 +60,6 @@ const Modal = (() => {
   return { abrir, fechar, fecharSeFora };
 })();
 
-// ═══════════════════════════════════════════════════════
-// UTILITÁRIOS
-// ═══════════════════════════════════════════════════════
 function escapeHtml(str) {
   if (str === null || str === undefined) return '—';
   return String(str)
@@ -147,22 +131,19 @@ function montarLocalizacao(row) {
   return row.endereco_codigo || '—';
 }
 
-// ═══════════════════════════════════════════════════════
-// NAVEGAÇÃO SPA (DINÂMICA)
-// ═══════════════════════════════════════════════════════
 const App = (() => {
   const sections = {
     'dashboard':    { title: 'Dashboard',                onEnter: () => { if(window.Dashboard) Dashboard.carregar(); } },
     'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => { if(window.Catalogo) Catalogo.carregar(); } },
-    'enderecos':    { title: 'Endereços WMS',             onEnter: () => { if(window.Endereco) Endereco.carregar(); } },
-    'wms-mapa':     { title: 'Mapa Porta-Pallet',         onEnter: () => { if(window.WmsMapa) WmsMapa.init(); } },
-    'equipamentos': { title: 'Equipamentos',              onEnter: () => { if(window.Movimentacao) Movimentacao.carregarEquipamentos(); } },
+    'enderecos':    { title: 'Endereços WMS',            onEnter: () => { if(window.Endereco) Endereco.carregar(); } },
+    'wms-mapa':     { title: 'Mapa Porta-Pallet',        onEnter: () => { if(window.WmsMapa) WmsMapa.init(); } },
+    'equipamentos': { title: 'Equipamentos',             onEnter: () => { if(window.Movimentacao) Movimentacao.carregarEquipamentos(); } },
     'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => { if(window.Movimentacao) Movimentacao.inicializarFormEntrada(); } },
-    'saida':        { title: 'Saída / Movimentação',      onEnter: () => {} },
-    'recebimento':  { title: 'Recebimento',               onEnter: () => { if(window.Recebimento) Recebimento.carregar(); } },
+    'saida':        { title: 'Saída / Movimentação',     onEnter: () => {} },
+    'recebimento':  { title: 'Recebimento',              onEnter: () => { if(window.Recebimento) Recebimento.carregar(); } },
     'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => { if(window.Solicitacoes) Solicitacoes.carregar(); } },
-    'reparo':       { title: 'Central de Reparo',          onEnter: () => { if(window.Reparo) Reparo.carregar(); } },
-    'internalizacao':{ title: 'Internalização',             onEnter: () => { if(window.Internalizacao) Internalizacao.carregar(); } },
+    'reparo':       { title: 'Central de Reparo',        onEnter: () => { if(window.Reparo) Reparo.carregar(); } },
+    'internalizacao':{ title: 'Internalização',          onEnter: () => { if(window.Internalizacao) Internalizacao.carregar(); } },
   };
 
   let currentSection = 'dashboard';
@@ -171,15 +152,12 @@ const App = (() => {
     if (!sections[sectionId]) return;
     currentSection = sectionId;
 
-    // 1. Atualiza CSS do menu lateral
     document.querySelectorAll('.nav-item').forEach(a => a.classList.remove('active'));
     const link = document.querySelector(`.nav-item[data-section="${sectionId}"]`);
     if (link) link.classList.add('active');
 
-    // 2. Atualiza título no Topbar
     document.getElementById('page-title').textContent = sections[sectionId].title;
 
-    // 3. Mostra spinner na área de conteúdo
     const pageContent = document.getElementById('page-content');
     pageContent.innerHTML = `
       <div style="padding: 3rem; text-align: center; color: var(--c-text-muted);">
@@ -189,17 +167,23 @@ const App = (() => {
     `;
 
     try {
-      // 4. Busca o arquivo HTML da pasta pages/
       const response = await fetch(`pages/${sectionId}.html`);
       if (!response.ok) throw new Error(`Página não encontrada (Erro ${response.status})`);
       
-      // 5. Injeta o HTML na tela
-      pageContent.innerHTML = await response.text();
+      const htmlText = await response.text();
+      
+      if (htmlText.includes('<div id="app">')) {
+         throw new Error("Erro de rota: O servidor devolveu a página inicial ao invés do fragmento.");
+      }
 
-      // 6. Refaz as ligações de eventos (buscas, filtros) que pertencem à nova tela injetada
+      pageContent.innerHTML = htmlText;
+
+      const novaSecao = pageContent.querySelector('.page-section');
+      if (novaSecao) {
+        novaSecao.classList.add('active');
+      }
+
       bindDynamicEvents();
-
-      // 7. Dispara a função de carregamento daquele módulo
       sections[sectionId].onEnter();
 
     } catch (error) {
@@ -216,8 +200,6 @@ const App = (() => {
     }
   }
 
-  // Como o HTML agora é injetado, os inputs de busca deixam de existir no carregamento inicial.
-  // Precisamos atrelar os eventos de 'input' toda vez que a página correspondente entra na tela.
   function bindDynamicEvents() {
     const searchCatalogo = document.getElementById('search-catalogo');
     if (searchCatalogo && window.Catalogo) {
@@ -240,7 +222,6 @@ const App = (() => {
   }
 
   function init() {
-    // Nav links
     document.querySelectorAll('.nav-item[data-section]').forEach(link => {
       link.addEventListener('click', e => {
         e.preventDefault();
@@ -248,7 +229,6 @@ const App = (() => {
       });
     });
 
-    // Sidebar toggle
     document.getElementById('sidebar-toggle').addEventListener('click', () => {
       document.getElementById('app').classList.toggle('sidebar-collapsed');
     });
@@ -259,9 +239,6 @@ const App = (() => {
   return { navegar, refresh, init };
 })();
 
-// ═══════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════
 const Dashboard = (() => {
   async function carregar() {
     try {
@@ -276,7 +253,6 @@ const Dashboard = (() => {
       document.getElementById('kpi-triagem').textContent   = t.em_triagem         || 0;
       document.getElementById('kpi-alertas').textContent   = dash.data.alertas_criticos || 0;
 
-      // Badge na nav
       const badge = document.getElementById('badge-reparo');
       if (badge) {
           if (parseInt(t.em_triagem, 10) > 0) {
@@ -287,7 +263,6 @@ const Dashboard = (() => {
           }
       }
 
-      // Tabela alertas
       const tbodyAlertas = document.getElementById('tbody-alertas');
       const countAlertas = document.getElementById('alertas-count');
       if (countAlertas) countAlertas.textContent = criticos.total;
@@ -309,7 +284,6 @@ const Dashboard = (() => {
           }
       }
 
-      // Tabela movimentações recentes
       const tbodyRec = document.getElementById('tbody-recentes');
       if (tbodyRec) {
           const movs = dash.data.movimentacoes_recentes || [];
@@ -345,5 +319,4 @@ const Dashboard = (() => {
   return { carregar };
 })();
 
-// Inicializa quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', () => App.init());

@@ -4,7 +4,7 @@
  * Base URL: /api (mesmo host, sem CORS em produção)
  */
 
-const API_BASE = '/api';
+const API_BASE = window.location.origin + '/api';
 
 const Api = (() => {
   /**
