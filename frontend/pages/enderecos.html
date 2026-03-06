@@ -1,0 +1,35 @@
+<section id="section-enderecos" class="page-section">
+  <div class="section-toolbar">
+    <div class="toolbar-left"></div>
+    <div class="toolbar-right">
+      <button class="btn btn-primary" onclick="Endereco.abrirModalCriacao()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Novo Endereço
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body p0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Código</th>
+              <th>Descrição</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-enderecos">
+            <tr><td colspan="5" class="empty-row">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

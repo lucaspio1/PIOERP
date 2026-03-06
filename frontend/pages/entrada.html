@@ -1,0 +1,61 @@
+<section id="section-entrada" class="page-section">
+  <div class="form-layout">
+    <div class="card form-card">
+      <div class="card-header">
+        <h3>Registrar Entrada de Equipamento</h3>
+        <p class="card-subtitle">Preencha os dados da peça física para incorporá-la ao estoque.</p>
+      </div>
+      <div class="card-body">
+        <form id="form-entrada" novalidate>
+
+          <div class="form-section-title">Identificação do Equipamento</div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="entrada-catalogo">Modelo (Catálogo) *</label>
+              <select id="entrada-catalogo" class="input-select" required>
+                <option value="">Selecione o modelo...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="entrada-tipo">Origem da Entrada *</label>
+              <select id="entrada-tipo" class="input-select" required>
+                <option value="entrada_compra">Compra (novo)</option>
+                <option value="entrada_retorno_reparo">Retorno de Reparo Externo</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="entrada-serie">Número de Série *</label>
+              <input type="text" id="entrada-serie" class="input-text" placeholder="Ex: SN-ABC123456" required />
+            </div>
+            <div class="form-group">
+              <label for="entrada-imobilizado">Patrimônio (Imobilizado) *</label>
+              <input type="text" id="entrada-imobilizado" class="input-text" placeholder="Ex: PAT-00001" required />
+            </div>
+          </div>
+
+          <div class="form-section-title">Destino Físico (WMS)</div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="entrada-endereco">Endereço de Destino *</label>
+              <select id="entrada-endereco" class="input-select" required disabled>
+                <option value="">Carregando endereços...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="entrada-obs">Observações</label>
+              <input type="text" id="entrada-obs" class="input-text" placeholder="Opcional..." />
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" onclick="Movimentacao.limparFormEntrada()">Limpar</button>
+            <button type="submit" class="btn btn-primary btn-lg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Registrar Entrada
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>

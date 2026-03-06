@@ -1,6 +1,6 @@
 /**
  * PIOERP — App Core
- * Responsável por: navegação SPA, utilitários de UI (Toast, Modal)
+ * Responsável por: navegação SPA (Dinâmica), utilitários de UI (Toast, Modal)
  * e inicialização dos módulos.
  */
 
@@ -76,8 +76,6 @@ const Modal = (() => {
 // ═══════════════════════════════════════════════════════
 // UTILITÁRIOS
 // ═══════════════════════════════════════════════════════
-
-/** Sanitização básica para evitar XSS no innerHTML */
 function escapeHtml(str) {
   if (str === null || str === undefined) return '—';
   return String(str)
@@ -87,7 +85,6 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-/** Formata data/hora para pt-BR */
 function formatDateTime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('pt-BR', {
@@ -96,7 +93,6 @@ function formatDateTime(iso) {
   });
 }
 
-/** Formata minutos para HH:MM */
 function formatMinutos(min) {
   if (min === null || min === undefined) return '—';
   const h = Math.floor(min / 60);
@@ -104,7 +100,6 @@ function formatMinutos(min) {
   return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}min`;
 }
 
-/** Formata segundos para HH:MM:SS */
 function formatTimer(totalSeconds) {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
@@ -112,7 +107,6 @@ function formatTimer(totalSeconds) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-/** Badge de status de equipamento */
 function badgeStatus(status) {
   const labels = {
     reposicao:         'Reposição',
@@ -126,7 +120,6 @@ function badgeStatus(status) {
   return `<span class="badge status-${status}">${labels[status] || status}</span>`;
 }
 
-/** Badge de status de solicitação de pallet */
 function badgeStatusSolicitacao(status) {
   const map = {
     pendente:     { label: 'Pendente',     cls: 'badge-warning' },
@@ -137,7 +130,6 @@ function badgeStatusSolicitacao(status) {
   return `<span class="badge ${s.cls}">${s.label}</span>`;
 }
 
-/** Badge de status de reparo */
 function badgeStatusReparo(status) {
   const labels = {
     aguardando:   'Aguardando',
@@ -148,7 +140,6 @@ function badgeStatusReparo(status) {
   return `<span class="badge status-${status}">${labels[status] || status}</span>`;
 }
 
-/** Retorna o endereço WMS do equipamento */
 function montarLocalizacao(row) {
   if (row.caixa_codigo) {
     return `${row.pallet_endereco_codigo || '?'} › ${row.pallet_codigo || '?'} › ${row.caixa_codigo}`;
@@ -157,43 +148,91 @@ function montarLocalizacao(row) {
 }
 
 // ═══════════════════════════════════════════════════════
-// NAVEGAÇÃO SPA
+// NAVEGAÇÃO SPA (DINÂMICA)
 // ═══════════════════════════════════════════════════════
 const App = (() => {
   const sections = {
-    'dashboard':    { title: 'Dashboard',                onEnter: () => Dashboard.carregar() },
-    'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => Catalogo.carregar() },
-    'enderecos':    { title: 'Endereços WMS',             onEnter: () => Endereco.carregar() },
-    'wms-mapa':     { title: 'Mapa Porta-Pallet',         onEnter: () => WmsMapa.init() },
-    'equipamentos': { title: 'Equipamentos',              onEnter: () => Movimentacao.carregarEquipamentos() },
-    'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => Movimentacao.inicializarFormEntrada() },
+    'dashboard':    { title: 'Dashboard',                onEnter: () => { if(window.Dashboard) Dashboard.carregar(); } },
+    'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => { if(window.Catalogo) Catalogo.carregar(); } },
+    'enderecos':    { title: 'Endereços WMS',             onEnter: () => { if(window.Endereco) Endereco.carregar(); } },
+    'wms-mapa':     { title: 'Mapa Porta-Pallet',         onEnter: () => { if(window.WmsMapa) WmsMapa.init(); } },
+    'equipamentos': { title: 'Equipamentos',              onEnter: () => { if(window.Movimentacao) Movimentacao.carregarEquipamentos(); } },
+    'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => { if(window.Movimentacao) Movimentacao.inicializarFormEntrada(); } },
     'saida':        { title: 'Saída / Movimentação',      onEnter: () => {} },
-    'recebimento':  { title: 'Recebimento',               onEnter: () => Recebimento.carregar() },
-    'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => Solicitacoes.carregar() },
-    'reparo':          { title: 'Central de Reparo',          onEnter: () => Reparo.carregar() },
-    'internalizacao':  { title: 'Internalização',             onEnter: () => Internalizacao.carregar() },
+    'recebimento':  { title: 'Recebimento',               onEnter: () => { if(window.Recebimento) Recebimento.carregar(); } },
+    'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => { if(window.Solicitacoes) Solicitacoes.carregar(); } },
+    'reparo':       { title: 'Central de Reparo',          onEnter: () => { if(window.Reparo) Reparo.carregar(); } },
+    'internalizacao':{ title: 'Internalização',             onEnter: () => { if(window.Internalizacao) Internalizacao.carregar(); } },
   };
 
   let currentSection = 'dashboard';
 
-  function navegar(sectionId) {
+  async function navegar(sectionId) {
     if (!sections[sectionId]) return;
+    currentSection = sectionId;
 
-    // Atualiza nav
+    // 1. Atualiza CSS do menu lateral
     document.querySelectorAll('.nav-item').forEach(a => a.classList.remove('active'));
     const link = document.querySelector(`.nav-item[data-section="${sectionId}"]`);
     if (link) link.classList.add('active');
 
-    // Troca section
-    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
-    const sec = document.getElementById(`section-${sectionId}`);
-    if (sec) sec.classList.add('active');
-
-    // Atualiza topbar
+    // 2. Atualiza título no Topbar
     document.getElementById('page-title').textContent = sections[sectionId].title;
 
-    currentSection = sectionId;
-    sections[sectionId].onEnter();
+    // 3. Mostra spinner na área de conteúdo
+    const pageContent = document.getElementById('page-content');
+    pageContent.innerHTML = `
+      <div style="padding: 3rem; text-align: center; color: var(--c-text-muted);">
+        <span class="spinner" style="width:30px;height:30px;border-width:3px;vertical-align:middle;margin-right:10px;"></span> 
+        Carregando tela...
+      </div>
+    `;
+
+    try {
+      // 4. Busca o arquivo HTML da pasta pages/
+      const response = await fetch(`pages/${sectionId}.html`);
+      if (!response.ok) throw new Error(`Página não encontrada (Erro ${response.status})`);
+      
+      // 5. Injeta o HTML na tela
+      pageContent.innerHTML = await response.text();
+
+      // 6. Refaz as ligações de eventos (buscas, filtros) que pertencem à nova tela injetada
+      bindDynamicEvents();
+
+      // 7. Dispara a função de carregamento daquele módulo
+      sections[sectionId].onEnter();
+
+    } catch (error) {
+      pageContent.innerHTML = `
+        <div class="card" style="margin: 2rem; border-left: 4px solid var(--c-danger);">
+          <div class="card-body">
+            <h3 style="color: var(--c-danger); margin-bottom: 0.5rem;">Erro de Navegação</h3>
+            <p style="color: var(--c-text-secondary);">${escapeHtml(error.message)}</p>
+            <button class="btn btn-outline" style="margin-top: 1rem;" onclick="App.refresh()">Tentar Novamente</button>
+          </div>
+        </div>
+      `;
+      Toast.error('Erro ao carregar', error.message);
+    }
+  }
+
+  // Como o HTML agora é injetado, os inputs de busca deixam de existir no carregamento inicial.
+  // Precisamos atrelar os eventos de 'input' toda vez que a página correspondente entra na tela.
+  function bindDynamicEvents() {
+    const searchCatalogo = document.getElementById('search-catalogo');
+    if (searchCatalogo && window.Catalogo) {
+      searchCatalogo.addEventListener('input', e => Catalogo.filtrar(e.target.value));
+    }
+
+    const searchEquip = document.getElementById('search-equip');
+    if (searchEquip && window.Movimentacao) {
+      searchEquip.addEventListener('input', e => Movimentacao.filtrarEquipamentos(e.target.value));
+    }
+
+    const filterNivel = document.getElementById('filter-nivel');
+    if (filterNivel && window.Endereco) {
+      filterNivel.addEventListener('change', e => Endereco.carregar(e.target.value));
+    }
   }
 
   function refresh() {
@@ -201,7 +240,7 @@ const App = (() => {
   }
 
   function init() {
-    // Bind nav links
+    // Nav links
     document.querySelectorAll('.nav-item[data-section]').forEach(link => {
       link.addEventListener('click', e => {
         e.preventDefault();
@@ -212,21 +251,6 @@ const App = (() => {
     // Sidebar toggle
     document.getElementById('sidebar-toggle').addEventListener('click', () => {
       document.getElementById('app').classList.toggle('sidebar-collapsed');
-    });
-
-    // Search filter for catálogo
-    document.getElementById('search-catalogo')?.addEventListener('input', e => {
-      Catalogo.filtrar(e.target.value);
-    });
-
-    // Search filter for equipamentos
-    document.getElementById('search-equip')?.addEventListener('input', e => {
-      Movimentacao.filtrarEquipamentos(e.target.value);
-    });
-
-    // Filter nivel enderecos
-    document.getElementById('filter-nivel')?.addEventListener('change', e => {
-      Endereco.carregar(e.target.value);
     });
 
     navegar('dashboard');
@@ -254,56 +278,64 @@ const Dashboard = (() => {
 
       // Badge na nav
       const badge = document.getElementById('badge-reparo');
-      if (parseInt(t.em_triagem, 10) > 0) {
-        badge.textContent = t.em_triagem;
-        badge.style.display = 'inline-flex';
-      } else {
-        badge.style.display = 'none';
+      if (badge) {
+          if (parseInt(t.em_triagem, 10) > 0) {
+            badge.textContent = t.em_triagem;
+            badge.style.display = 'inline-flex';
+          } else {
+            badge.style.display = 'none';
+          }
       }
 
       // Tabela alertas
       const tbodyAlertas = document.getElementById('tbody-alertas');
-      document.getElementById('alertas-count').textContent = criticos.total;
-      if (!criticos.data.length) {
-        tbodyAlertas.innerHTML = `<tr><td colspan="6" class="empty-row">Nenhum alerta crítico. Estoque dentro dos limites.</td></tr>`;
-      } else {
-        tbodyAlertas.innerHTML = criticos.data.map(r => `
-          <tr class="row-critical">
-            <td><strong>${escapeHtml(r.nome)}</strong></td>
-            <td>${escapeHtml(r.categoria)}</td>
-            <td>${r.estoque_minimo}</td>
-            <td><strong style="color:var(--c-danger)">${r.qtd_reposicao}</strong></td>
-            <td><span class="badge badge-danger">-${Math.abs(r.deficit)}</span></td>
-            <td>${r.qtd_ag_triagem}</td>
-          </tr>
-        `).join('');
+      const countAlertas = document.getElementById('alertas-count');
+      if (countAlertas) countAlertas.textContent = criticos.total;
+      
+      if (tbodyAlertas) {
+          if (!criticos.data.length) {
+            tbodyAlertas.innerHTML = `<tr><td colspan="6" class="empty-row">Nenhum alerta crítico. Estoque dentro dos limites.</td></tr>`;
+          } else {
+            tbodyAlertas.innerHTML = criticos.data.map(r => `
+              <tr class="row-critical">
+                <td><strong>${escapeHtml(r.nome)}</strong></td>
+                <td>${escapeHtml(r.categoria)}</td>
+                <td>${r.estoque_minimo}</td>
+                <td><strong style="color:var(--c-danger)">${r.qtd_reposicao}</strong></td>
+                <td><span class="badge badge-danger">-${Math.abs(r.deficit)}</span></td>
+                <td>${r.qtd_ag_triagem}</td>
+              </tr>
+            `).join('');
+          }
       }
 
       // Tabela movimentações recentes
       const tbodyRec = document.getElementById('tbody-recentes');
-      const movs = dash.data.movimentacoes_recentes || [];
-      if (!movs.length) {
-        tbodyRec.innerHTML = `<tr><td colspan="5" class="empty-row">Nenhuma movimentação registrada.</td></tr>`;
-      } else {
-        const tipoLabel = {
-          entrada_compra:          'Entrada Compra',
-          entrada_retorno_reparo:  'Retorno Reparo',
-          entrada_recebimento:     'Recebimento',
-          saida_uso:               'Saída para Uso',
-          saida_triagem:           'Enviado Triagem',
-          saida_venda:             'Baixa Venda',
-          movimentacao:            'Movimentação',
-          transferencia_lote:      'Transf. em Lote',
-        };
-        tbodyRec.innerHTML = movs.map(m => `
-          <tr>
-            <td>${formatDateTime(m.created_at)}</td>
-            <td>${escapeHtml(m.modelo)}</td>
-            <td><code>${escapeHtml(m.numero_serie)}</code></td>
-            <td>${escapeHtml(tipoLabel[m.tipo] || m.tipo)}</td>
-            <td>${badgeStatus(m.status_novo)}</td>
-          </tr>
-        `).join('');
+      if (tbodyRec) {
+          const movs = dash.data.movimentacoes_recentes || [];
+          if (!movs.length) {
+            tbodyRec.innerHTML = `<tr><td colspan="5" class="empty-row">Nenhuma movimentação registrada.</td></tr>`;
+          } else {
+            const tipoLabel = {
+              entrada_compra:          'Entrada Compra',
+              entrada_retorno_reparo:  'Retorno Reparo',
+              entrada_recebimento:     'Recebimento',
+              saida_uso:               'Saída para Uso',
+              saida_triagem:           'Enviado Triagem',
+              saida_venda:             'Baixa Venda',
+              movimentacao:            'Movimentação',
+              transferencia_lote:      'Transf. em Lote',
+            };
+            tbodyRec.innerHTML = movs.map(m => `
+              <tr>
+                <td>${formatDateTime(m.created_at)}</td>
+                <td>${escapeHtml(m.modelo)}</td>
+                <td><code>${escapeHtml(m.numero_serie)}</code></td>
+                <td>${escapeHtml(tipoLabel[m.tipo] || m.tipo)}</td>
+                <td>${badgeStatus(m.status_novo)}</td>
+              </tr>
+            `).join('');
+          }
       }
     } catch (err) {
       Toast.error('Erro ao carregar dashboard', err.message);

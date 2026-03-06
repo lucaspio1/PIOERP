@@ -1,0 +1,56 @@
+<section id="section-saida" class="page-section">
+  <div class="form-layout">
+    <div class="card form-card">
+      <div class="card-header">
+        <h3>Saída / Movimentação de Equipamento</h3>
+        <p class="card-subtitle">Altere o status de um equipamento: envio para uso, triagem ou baixa.</p>
+      </div>
+      <div class="card-body">
+        <form id="form-saida" novalidate>
+          <div class="form-section-title">Localizar Equipamento</div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="saida-serie">Número de Série *</label>
+              <div class="input-with-btn">
+                <input type="text" id="saida-serie" class="input-text" placeholder="Digite o nº de série..." />
+                <button type="button" class="btn btn-secondary" onclick="Movimentacao.buscarEquipamentoSaida()">Localizar</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="saida-info-panel" class="info-panel" style="display:none">
+            <div class="info-grid">
+              <div class="info-item"><span class="info-label">Modelo</span><span class="info-value" id="saida-modelo">—</span></div>
+              <div class="info-item"><span class="info-label">Patrimônio</span><span class="info-value" id="saida-imobilizado">—</span></div>
+              <div class="info-item"><span class="info-label">Status Atual</span><span class="info-value" id="saida-status-atual">—</span></div>
+              <div class="info-item"><span class="info-label">Localização</span><span class="info-value" id="saida-local">—</span></div>
+            </div>
+          </div>
+
+          <div id="saida-actions-area" style="display:none">
+            <div class="form-section-title">Ação de Saída</div>
+            <input type="hidden" id="saida-equip-id" />
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="saida-destino">Destino / Novo Status *</label>
+                <select id="saida-destino" class="input-select" required>
+                  <option value="">Selecione a ação...</option>
+                  <option value="saida_uso">Enviar para Uso (sai do estoque)</option>
+                  <option value="ag_triagem">Enviar para Ag. Triagem (reparo)</option>
+                  <option value="venda">Baixar para Venda / Sucata</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="saida-obs">Observações / Motivo</label>
+                <input type="text" id="saida-obs" class="input-text" placeholder="Descreva o motivo..." />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary btn-lg">Confirmar Movimentação</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,108 @@
+<section id="section-dashboard" class="page-section active">
+  <div class="kpi-grid" id="kpi-cards">
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="7" width="20" height="14" rx="2"/>
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+        </svg>
+      </div>
+      <div class="kpi-body">
+        <span class="kpi-value" id="kpi-total">—</span>
+        <span class="kpi-label">Total Equipamentos</span>
+      </div>
+    </div>
+    
+    <div class="kpi-card kpi-green">
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <div class="kpi-body">
+        <span class="kpi-value" id="kpi-reposicao">—</span>
+        <span class="kpi-label">Em Reposição</span>
+      </div>
+    </div>
+    
+    <div class="kpi-card kpi-yellow">
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+      <div class="kpi-body">
+        <span class="kpi-value" id="kpi-triagem">—</span>
+        <span class="kpi-label">Ag. Triagem</span>
+      </div>
+    </div>
+    
+    <div class="kpi-card kpi-red">
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="kpi-body">
+        <span class="kpi-value" id="kpi-alertas">—</span>
+        <span class="kpi-label">Alertas Críticos</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="card card-full">
+      <div class="card-header">
+        <h3>Alertas de Estoque Crítico</h3>
+        <span class="badge badge-danger" id="alertas-count">0</span>
+      </div>
+      <div class="card-body">
+        <div class="table-wrapper">
+          <table class="data-table" id="table-alertas">
+            <thead>
+              <tr>
+                <th>Modelo</th>
+                <th>Categoria</th>
+                <th>Mínimo</th>
+                <th>Em Reposição</th>
+                <th>Déficit</th>
+                <th>Ag. Triagem</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-alertas">
+              <tr><td colspan="6" class="empty-row">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-full">
+      <div class="card-header">
+        <h3>Últimas Movimentações</h3>
+      </div>
+      <div class="card-body">
+        <div class="table-wrapper">
+          <table class="data-table" id="table-recentes">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>Modelo</th>
+                <th>Nº Série</th>
+                <th>Tipo</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-recentes">
+              <tr><td colspan="5" class="empty-row">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

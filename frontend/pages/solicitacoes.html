@@ -1,0 +1,44 @@
+<section id="section-solicitacoes" class="page-section">
+  <div class="section-toolbar">
+    <div class="toolbar-left">
+      <select id="filter-sol-status" class="input-select" onchange="Solicitacoes.carregar()">
+        <option value="">Todas as solicitações</option>
+        <option value="pendente" selected>Pendentes</option>
+        <option value="atendida">Atendidas</option>
+        <option value="cancelada">Canceladas</option>
+      </select>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-sm btn-outline" onclick="Solicitacoes.carregar()">Atualizar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Solicitações de Descida de Pallet</h3>
+      <p class="card-subtitle">Pedidos do técnico de reparo para o almoxarife descer um lote de determinado modelo.</p>
+    </div>
+    <div class="card-body p0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Modelo</th>
+              <th>Categoria</th>
+              <th>Estoque Atual / Mín.</th>
+              <th>Déficit</th>
+              <th>Status</th>
+              <th>Solicitado em</th>
+              <th>Observações</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-solicitacoes">
+            <tr><td colspan="9" class="empty-row">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

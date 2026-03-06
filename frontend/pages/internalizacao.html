@@ -1,0 +1,40 @@
+<section id="section-internalizacao" class="page-section">
+  <div class="section-toolbar">
+    <div class="toolbar-left">
+      <span style="font-size:13px;color:var(--c-text-muted)">
+        Equipamentos reparados aguardando validação e alocação física no WMS.
+      </span>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-sm btn-outline" onclick="Internalizacao.carregar()">Atualizar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Aguardando Internalização</h3>
+      <p class="card-subtitle">
+        Equipamentos finalizados pelo técnico como "bom para uso". O administrador valida e aloca no WMS.
+      </p>
+    </div>
+    <div class="card-body p0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Modelo</th>
+              <th>Nº Série</th>
+              <th>Patrimônio</th>
+              <th>Filial Atual</th>
+              <th>Finalizado em</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-internalizacao">
+            <tr><td colspan="6" class="empty-row">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

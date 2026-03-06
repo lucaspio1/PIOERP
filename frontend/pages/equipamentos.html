@@ -1,0 +1,41 @@
+<section id="section-equipamentos" class="page-section">
+  <div class="section-toolbar">
+    <div class="toolbar-left">
+      <select id="filter-status-equip" class="input-select" onchange="Movimentacao.carregarEquipamentos()">
+        <option value="">Todos os status</option>
+        <option value="reposicao">Reposição</option>
+        <option value="ag_triagem">Ag. Triagem</option>
+        <option value="em_uso">Em Uso</option>
+        <option value="pre_triagem">Pré-Triagem</option>
+        <option value="pre_venda">Ag. Venda</option>
+        <option value="ag_internalizacao">Ag. Internalização</option>
+        <option value="venda">Venda</option>
+      </select>
+      <input type="search" id="search-equip" class="input-search" placeholder="Buscar por nº série ou patrimônio..." />
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body p0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Modelo</th>
+              <th>Nº Série</th>
+              <th>Patrimônio</th>
+              <th>Status</th>
+              <th>Caixa</th>
+              <th>Localização</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-equipamentos">
+            <tr><td colspan="8" class="empty-row">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

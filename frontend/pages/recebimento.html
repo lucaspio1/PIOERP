@@ -1,0 +1,167 @@
+<section id="section-recebimento" class="page-section">
+  <div class="section-toolbar">
+    <div class="toolbar-left">
+      <div class="tab-group" id="receb-tabs">
+        <button class="btn btn-primary tab-btn active" data-tab="receb-catalogacao" onclick="Recebimento.trocarAba('catalogacao')">
+          Entrada e Catalogação
+        </button>
+        <button class="btn btn-outline tab-btn" data-tab="receb-montar" onclick="Recebimento.trocarAba('montar')">
+          Montar Pallet / Caixa
+        </button>
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-sm btn-outline" onclick="Recebimento.carregar()">Atualizar</button>
+    </div>
+  </div>
+
+  <div id="receb-catalogacao" class="receb-tab-content">
+    <div class="form-layout">
+      <div class="card form-card">
+        <div class="card-header">
+          <h3>Catalogar Item Recebido</h3>
+          <p class="card-subtitle">Registre o item chegado de outra loja e destine-o à prateleira correta.</p>
+        </div>
+        <div class="card-body">
+          <form id="form-recebimento" novalidate>
+
+            <div class="form-section-title">Identificação do Equipamento</div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="receb-catalogo">Modelo (Catálogo) *</label>
+                <select id="receb-catalogo" class="input-select" required>
+                  <option value="">Selecione o modelo...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="receb-destino-inicial">Prateleira de Destino *</label>
+                <select id="receb-destino-inicial" class="input-select" required>
+                  <option value="pre_triagem">Pré-Triagem (aguarda avaliação)</option>
+                  <option value="pre_venda">Pré-Venda (para venda / sucata)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="receb-serie">Número de Série *</label>
+                <input type="text" id="receb-serie" class="input-text" placeholder="Ex: SN-ABC123456" required />
+              </div>
+              <div class="form-group">
+                <label for="receb-imobilizado">Patrimônio (Imobilizado) *</label>
+                <input type="text" id="receb-imobilizado" class="input-text" placeholder="Ex: PAT-00001" required />
+              </div>
+            </div>
+
+            <div class="form-section-title">Destino Físico (Prateleira de Recebimento)</div>
+            <div class="info-panel" style="margin-bottom:1rem">
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-label">Pré-Triagem</span>
+                  <span class="info-value"><code id="receb-addr-pretriagem">Carregando...</code></span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Pré-Venda</span>
+                  <span class="info-value"><code id="receb-addr-prevenda">Carregando...</code></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid-1">
+              <div class="form-group">
+                <label for="receb-obs">Observações / Condição do Item</label>
+                <input type="text" id="receb-obs" class="input-text" placeholder="Ex: Tela trincada, HD ausente..." />
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn btn-outline" onclick="Recebimento.limparFormCatalogacao()">Limpar</button>
+              <button type="submit" class="btn btn-primary btn-lg">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                Registrar Item Recebido
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="receb-montar" class="receb-tab-content" style="display:none">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3>Montar Pallet / Caixa</h3>
+          <p class="card-subtitle">Selecione itens das prateleiras de pré-triagem/pré-venda e consolide-os em uma caixa definitiva.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="montar-filtro-status" class="input-select" onchange="Recebimento.carregarPrateleiras()" style="width:auto">
+            <option value="pre_triagem">Pré-Triagem</option>
+            <option value="pre_venda">Pré-Venda</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body p0">
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:40px">
+                  <input type="checkbox" id="montar-check-all" onchange="Recebimento.selecionarTodos(this.checked)" title="Selecionar todos" />
+                </th>
+                <th>Modelo</th>
+                <th>Nº Série</th>
+                <th>Patrimônio</th>
+                <th>Status</th>
+                <th>Observações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-prateleiras">
+              <tr><td colspan="6" class="empty-row">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-body" style="border-top:1px solid var(--c-border)">
+        <div id="montar-destino-info" style="margin-bottom:12px">
+          <span class="badge badge-warning" style="font-size:13px;padding:6px 12px">
+            Destino: Ag. Triagem (criará reparos automaticamente)
+          </span>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group" id="montar-endereco-group">
+            <label>Pallet de Destino * <span style="font-size:11px;color:var(--c-text-muted)">(uma caixa será criada automaticamente)</span></label>
+            <div class="input-with-btn">
+              <select id="montar-pallet-destino" class="input-select">
+                <option value="">Selecione o pallet...</option>
+              </select>
+              <button type="button" class="btn btn-secondary" onclick="Recebimento.mostrarCriarPallet()">+ Pallet</button>
+            </div>
+            
+            <div id="montar-criar-pallet-inline" style="display:none;margin-top:8px;padding:12px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-surface)">
+              <div style="margin-bottom:8px">
+                <label style="font-size:12px">Endereço no Porta-Pallet *</label>
+                <select id="montar-novo-pallet-endereco" class="input-select">
+                  <option value="">Carregando endereços...</option>
+                </select>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="montar-novo-pallet-codigo" class="input-text" style="flex:1" placeholder="Cód. Pallet (ex: P-99)" />
+                <button type="button" class="btn btn-sm btn-primary" onclick="Recebimento.criarPallet()">Criar</button>
+                <button type="button" class="btn btn-sm btn-outline" onclick="Recebimento.ocultarCriarPallet()">&times;</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Observações</label>
+            <input type="text" id="montar-obs" class="input-text" placeholder="Opcional..." />
+          </div>
+        </div>
+        <div class="form-actions">
+          <span id="montar-count-badge" class="badge badge-info">0 itens selecionados</span>
+          <button class="btn btn-primary btn-lg" onclick="Recebimento.confirmarMontarPallet()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Transferir Selecionados
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
