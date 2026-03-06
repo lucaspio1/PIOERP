@@ -132,19 +132,19 @@ function montarLocalizacao(row) {
 }
 
 const App = (() => {
-  const sections = {
-    'dashboard':    { title: 'Dashboard',                onEnter: () => { if(window.Dashboard) Dashboard.carregar(); } },
-    'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => { if(window.Catalogo) Catalogo.carregar(); } },
-    'enderecos':    { title: 'Endereços WMS',            onEnter: () => { if(window.Endereco) Endereco.carregar(); } },
-    'wms-mapa':     { title: 'Mapa Porta-Pallet',        onEnter: () => { if(window.WmsMapa) WmsMapa.init(); } },
-    'equipamentos': { title: 'Equipamentos',             onEnter: () => { if(window.Movimentacao) Movimentacao.carregarEquipamentos(); } },
-    'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => { if(window.Movimentacao) Movimentacao.inicializarFormEntrada(); } },
-    'saida':        { title: 'Saída / Movimentação',     onEnter: () => {} },
-    'recebimento':  { title: 'Recebimento',              onEnter: () => { if(window.Recebimento) Recebimento.carregar(); } },
-    'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => { if(window.Solicitacoes) Solicitacoes.carregar(); } },
-    'reparo':       { title: 'Central de Reparo',        onEnter: () => { if(window.Reparo) Reparo.carregar(); } },
-    'internalizacao':{ title: 'Internalização',          onEnter: () => { if(window.Internalizacao) Internalizacao.carregar(); } },
-  };
+const sections = {
+  'dashboard':    { title: 'Dashboard',                onEnter: () => { if(typeof Dashboard !== 'undefined') Dashboard.carregar(); } },
+  'catalogo':     { title: 'Catálogo de Equipamentos', onEnter: () => { if(typeof Catalogo !== 'undefined') Catalogo.carregar(); } },
+  'enderecos':    { title: 'Endereços WMS',            onEnter: () => { if(typeof Endereco !== 'undefined') Endereco.carregar(); } },
+  'wms-mapa':     { title: 'Mapa Porta-Pallet',        onEnter: () => { if(typeof WmsMapa !== 'undefined') WmsMapa.init(); } },
+  'equipamentos': { title: 'Equipamentos',             onEnter: () => { if(typeof Movimentacao !== 'undefined') Movimentacao.carregarEquipamentos(); } },
+  'entrada':      { title: 'Entrada de Equipamento',   onEnter: () => { if(typeof Movimentacao !== 'undefined') Movimentacao.inicializarFormEntrada(); } },
+  'saida':        { title: 'Saída / Movimentação',     onEnter: () => {} },
+  'recebimento':  { title: 'Recebimento',              onEnter: () => { if(typeof Recebimento !== 'undefined') Recebimento.carregar(); } },
+  'solicitacoes': { title: 'Solicitações de Almoxarifado', onEnter: () => { if(typeof Solicitacoes !== 'undefined') Solicitacoes.carregar(); } },
+  'reparo':       { title: 'Central de Reparo',        onEnter: () => { if(typeof Reparo !== 'undefined') Reparo.carregar(); } },
+  'internalizacao':{ title: 'Internalização',          onEnter: () => { if(typeof Internalizacao !== 'undefined') Internalizacao.carregar(); } },
+};
 
   let currentSection = 'dashboard';
 
